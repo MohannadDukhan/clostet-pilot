@@ -17,8 +17,8 @@ a tiny wardrobe app: upload clothing images, see them in your wardrobe, edit bas
 
 ## run it locally
 
-### 1) backend (FastAPI)
-```bash
+1) backend (FastAPI)
+
 cd backend
 python -m venv .venv
 # Windows
