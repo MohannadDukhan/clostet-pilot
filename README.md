@@ -19,20 +19,20 @@ a tiny wardrobe app: upload clothing images, see them in your wardrobe, edit bas
 
 1) backend (FastAPI)
 
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+- cd backend
+- python -m venv .venv
+- .venv\Scripts\activate
+- pip install -r requirements.txt
+- uvicorn app.main:app --reload
 
 API docs: http://127.0.0.1:8000/docs
 images served under: http://127.0.0.1:8000/images/<stored_path>
 
 2) frontend (Vite)
 
-cd frontend
-npm install
-npm run dev
+- cd frontend
+- npm install
+- npm run dev
 open the printed URL (usually http://localhost:5173)
 
 3) quick flow
@@ -46,4 +46,5 @@ project goals (next)
 plug in LLM to auto-fill item fields (category/color/season/formality)
 add “make outfit” flow (LLM proposes outfit using wardrobe + request)
 basic auth later if we need it
+
 
