@@ -21,10 +21,7 @@ a tiny wardrobe app: upload clothing images, see them in your wardrobe, edit bas
 
 cd backend
 python -m venv .venv
-# Windows
 .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
@@ -49,3 +46,4 @@ project goals (next)
 plug in LLM to auto-fill item fields (category/color/season/formality)
 add “make outfit” flow (LLM proposes outfit using wardrobe + request)
 basic auth later if we need it
+
