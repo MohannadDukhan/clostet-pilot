@@ -37,14 +37,15 @@ open the printed URL (usually http://localhost:5173)
 
 3) quick flow
 
-create user (top bar)
-upload item (choose image → upload)
-wardrobe shows your item; click edit, fill fields, save (collapses to summary)
+- create user (top bar)
+- upload item (choose image → upload)
+- wardrobe shows your item; click edit, fill fields, save (collapses to summary)
 
 project goals (next)
 
-plug in LLM to auto-fill item fields (category/color/season/formality)
-add “make outfit” flow (LLM proposes outfit using wardrobe + request)
-basic auth later if we need it
+- plug in LLM to auto-fill item fields (category/color/season/formality)
+- add “make outfit” flow (LLM proposes outfit using wardrobe + request)
+- basic auth later if we need it
+
 
 
