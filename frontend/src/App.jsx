@@ -17,6 +17,9 @@ export default function App() {
   const [editMap, setEditMap] = useState({});     // { [itemId]: {...} }
   const [expandMap, setExpandMap] = useState({}); // { [itemId]: boolean }
 
+  // show/hide user edit form
+  const [showEditUser, setShowEditUser] = useState(false);
+
   const imagesBase = useMemo(() => `${API.defaults.baseURL}/images/`, []);
 
   // load users on boot
@@ -51,11 +54,16 @@ export default function App() {
         const collapsed = {};
         for (const it of data) {
           fresh[it.id] = {
+            outfit_part: it.outfit_part || "",
             category: it.category || "",
-            color: it.color || "",
-            season: it.season || "",
+            primary_color: it.primary_color || "",
+            secondary_color: it.secondary_color || "",
             formality: it.formality || "",
-            notes: it.notes || "",
+            season: it.season || "",
+            is_graphic: it.is_graphic || false,
+            target_gender: it.target_gender || "",
+            gender_source: it.gender_source || "",
+            gender_confidence: it.gender_confidence || "",
             verified: it.verified || false,
           };
           collapsed[it.id] = false; // start collapsed
@@ -74,7 +82,7 @@ export default function App() {
     if (!newUserName.trim()) return;
     setBusy(true);
     try {
-      const { data } = await API.post("/users", { display_name: newUserName.trim() });
+      const { data } = await API.post("/users", { name: newUserName.trim(), gender: "male", city: "London" });
       setUsers((u) => [data, ...u]);
       setUserId(data.id);
       setNewUserName("");
@@ -100,7 +108,19 @@ export default function App() {
       setItems((prev) => [data, ...prev]);
       setEditMap((m) => ({
         ...m,
-        [data.id]: { category: "", color: "", season: "", formality: "", notes: "", verified: false },
+        [data.id]: {
+          outfit_part: data.outfit_part || "",
+          category: data.category || "",
+          primary_color: data.primary_color || "",
+          secondary_color: data.secondary_color || "",
+          formality: data.formality || "",
+          season: data.season || "",
+          is_graphic: data.is_graphic || false,
+          target_gender: data.target_gender || "",
+          gender_source: data.gender_source || "",
+          gender_confidence: data.gender_confidence || "",
+          verified: data.verified || false,
+        },
       }));
       setExpandMap((m) => ({ ...m, [data.id]: true })); // open editor for new upload
       setFile(null);
@@ -190,10 +210,56 @@ export default function App() {
           >
             <option value="" disabled>choose user…</option>
             {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.display_name} (id {u.id})</option>
+              <option key={u.id} value={u.id}>{u.name} (id {u.id})</option>
             ))}
           </select>
         </div>
+
+        {/* user edit form toggle */}
+        {userId && (
+          <>
+            <button
+              onClick={() => setShowEditUser((v) => !v)}
+              style={{ ...btnStyle, marginBottom: 10 }}
+            >
+              {showEditUser ? "close edit user" : "edit user"}
+            </button>
+            {showEditUser && (
+              <div style={{ ...cardStyle, marginBottom: 20, marginTop: -8 }}>
+                <h2 style={h2Style}>edit user</h2>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <TextBox label="name" value={users.find(u => u.id === userId)?.name || ""} onChange={(v) => {
+                    setUsers(us => us.map(u => u.id === userId ? { ...u, name: v } : u));
+                  }} />
+                  <TextBox label="gender" value={users.find(u => u.id === userId)?.gender || ""} onChange={(v) => {
+                    setUsers(us => us.map(u => u.id === userId ? { ...u, gender: v } : u));
+                  }} />
+                  <TextBox label="city" value={users.find(u => u.id === userId)?.city || ""} onChange={(v) => {
+                    setUsers(us => us.map(u => u.id === userId ? { ...u, city: v } : u));
+                  }} />
+                  <TextBox label="style_preferences" value={users.find(u => u.id === userId)?.style_preferences || ""} onChange={(v) => {
+                    setUsers(us => us.map(u => u.id === userId ? { ...u, style_preferences: v } : u));
+                  }} />
+                  <button onClick={async () => {
+                    const u = users.find(u => u.id === userId);
+                    if (!u) return;
+                    setBusy(true);
+                    try {
+                      const { data } = await API.patch(`/users/${userId}`, u);
+                      setUsers(us => us.map(x => x.id === userId ? data : x));
+                      setMessage("user updated");
+                    } catch (e) {
+                      setMessage("failed to update user");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }} disabled={busy} style={btnStyle}>save</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
 
         {/* upload */}
         <div style={cardStyle}>
@@ -217,11 +283,16 @@ export default function App() {
             <div style={gridStyle}>
               {items.map((it) => {
                 const form = editMap[it.id] || {
+                  outfit_part: "",
                   category: "",
-                  color: "",
-                  season: "",
+                  primary_color: "",
+                  secondary_color: "",
                   formality: "",
-                  notes: "",
+                  season: "",
+                  is_graphic: false,
+                  target_gender: "",
+                  gender_source: "",
+                  gender_confidence: "",
                   verified: false,
                 };
                 const expanded = !!expandMap[it.id];
@@ -241,11 +312,23 @@ export default function App() {
                     {expanded ? (
                       <>
                         <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                          <TextBox label="outfit_part" value={form.outfit_part} onChange={(v) => updateEdit(it.id, "outfit_part", v)} />
                           <TextBox label="category" value={form.category} onChange={(v) => updateEdit(it.id, "category", v)} />
-                          <TextBox label="color" value={form.color} onChange={(v) => updateEdit(it.id, "color", v)} />
-                          <TextBox label="season" value={form.season} onChange={(v) => updateEdit(it.id, "season", v)} />
+                          <TextBox label="primary_color" value={form.primary_color} onChange={(v) => updateEdit(it.id, "primary_color", v)} />
+                          <TextBox label="secondary_color" value={form.secondary_color} onChange={(v) => updateEdit(it.id, "secondary_color", v)} />
                           <TextBox label="formality" value={form.formality} onChange={(v) => updateEdit(it.id, "formality", v)} />
-                          <TextArea label="notes" value={form.notes} onChange={(v) => updateEdit(it.id, "notes", v)} />
+                          <TextBox label="season" value={form.season} onChange={(v) => updateEdit(it.id, "season", v)} />
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                            <input
+                              type="checkbox"
+                              checked={form.is_graphic || false}
+                              onChange={(e) => updateEdit(it.id, "is_graphic", e.target.checked)}
+                            />
+                            is_graphic
+                          </label>
+                          <TextBox label="target_gender" value={form.target_gender} onChange={(v) => updateEdit(it.id, "target_gender", v)} />
+                          <TextBox label="gender_source" value={form.gender_source} onChange={(v) => updateEdit(it.id, "gender_source", v)} />
+                          <TextBox label="gender_confidence" value={form.gender_confidence} onChange={(v) => updateEdit(it.id, "gender_confidence", v)} />
                           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                             <input
                               type="checkbox"
@@ -254,6 +337,7 @@ export default function App() {
                             />
                             verified
                           </label>
+
                         </div>
 
                         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -265,11 +349,17 @@ export default function App() {
                     ) : (
                       <>
                         <div style={{ display: "grid", gap: 6, marginTop: 10, fontSize: 14 }}>
+                          <FieldLine label="outfit_part" value={it.outfit_part} />
                           <FieldLine label="category" value={it.category} />
-                          <FieldLine label="color" value={it.color} />
-                          <FieldLine label="season" value={it.season} />
+                          <FieldLine label="primary_color" value={it.primary_color} />
+                          <FieldLine label="secondary_color" value={it.secondary_color} />
                           <FieldLine label="formality" value={it.formality} />
-                          {it.notes ? <FieldLine label="notes" value={it.notes} /> : null}
+                          <FieldLine label="season" value={it.season} />
+                          <FieldLine label="is_graphic" value={it.is_graphic ? "yes" : "no"} />
+                          <FieldLine label="target_gender" value={it.target_gender} />
+                          <FieldLine label="gender_source" value={it.gender_source} />
+                          <FieldLine label="gender_confidence" value={it.gender_confidence} />
+
                           <div style={{ opacity: 0.75 }}>{it.verified ? "verified ✅" : "not verified"}</div>
                         </div>
 
