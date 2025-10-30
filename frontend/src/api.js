@@ -7,8 +7,10 @@ export const API = axios.create({
 });
 
 // USERS
-export async function createUser(name) {
-  const { data } = await API.post("/users", { name });
+export async function createUser(payload) {
+  // Accept either a name string (backwards compat) or a full payload object
+  const body = typeof payload === "string" ? { name: payload } : payload || {};
+  const { data } = await API.post("/users", body);
   return data;
 }
 export async function listUsers() {

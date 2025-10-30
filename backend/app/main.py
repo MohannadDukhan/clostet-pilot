@@ -5,7 +5,7 @@ from sqlmodel import Session
 from typing import List
 from pathlib import Path
 from .db import init_db, get_session
-from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate, ItemClassification  # ItemClassification was added earlier
+from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate, ItemClassification, Gender
 from . import crud
 from .config import settings
 from .vision import classify_image
@@ -37,7 +37,11 @@ def list_users(session: Session = Depends(get_session)):
 
 @app.post('/users', response_model=UserRead)
 def create_user(payload: UserCreate, session: Session = Depends(get_session)):
-    return crud.create_user(session, payload.name, payload.gender, payload.city, payload.style_preferences)
+    try:
+        user = crud.create_user(session, payload.name, payload.gender, payload.city, payload.style_preferences)
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ---- Items ----
 @app.post('/users/{user_id}/items', response_model=ItemRead)

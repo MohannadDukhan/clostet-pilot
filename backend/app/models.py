@@ -16,11 +16,17 @@ class Season(str, Enum):
     SPRING = "spring"
     FALL = "fall"
 
+
+# Gender enum for strict validation
+class Gender(str, Enum):
+    male = "male"
+    female = "female"
+
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    gender: Optional[str] = None
-    city: Optional[str] = None
+    gender: Gender
+    city: str
     style_preferences: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     items: List['Item'] = Relationship(back_populates='user')

@@ -1,18 +1,24 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
+from enum import Enum
+
+# Gender enum for schemas
+class Gender(str, Enum):
+    male = "male"
+    female = "female"
 
 class UserCreate(BaseModel):
     name: str
-    gender: Optional[str] = None
-    city: Optional[str] = None
+    gender: Gender
+    city: str
     style_preferences: Optional[str] = None
 
 class UserRead(BaseModel):
     id: int
     name: str
-    gender: Optional[str] = None
-    city: Optional[str] = None
+    gender: Gender
+    city: str
     style_preferences: Optional[str] = None
     created_at: datetime
     class Config:
