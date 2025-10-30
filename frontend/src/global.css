@@ -1,20 +1,60 @@
-/* reset + theme */
-:root {
-  --bg: #0f131c;   /* page background */
-  --fg: #eaeaea;   /* text color */
+/* Tailwind v4 entry */
+@import "tailwindcss";
+
+/* ---- Design tokens (Apple-ish dark) ---- */
+@theme {
+  --color-bg: #0f131c;
+  --color-surface: #121720;
+  --color-panel: #131a24;
+  --color-border: #202634;
+
+  --color-text: #e8eaed;
+  --color-text-muted: #aab1bf;
+
+  --color-accent: #4ade80;
+
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+
+  /* custom shadow token */
+  --shadow-soft: 0 10px 30px rgba(0,0,0,0.25);
 }
 
-* { box-sizing: border-box; }
-
+/* ---- App base ---- */
+:root { color-scheme: dark; }
 html, body, #root { height: 100%; }
+body { @apply bg-bg text-text antialiased; }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
-               "Apple Color Emoji", "Segoe UI Emoji";
+/* ---- Reusable components ---- */
+.card {
+  /* use our panel color + custom shadow token */
+  @apply bg-panel border border-border rounded-2xl;
+  box-shadow: var(--shadow-soft);
 }
 
-/* let the app take full width; App.jsx centers the inner container */
-#root { width: 100%; }
+.btn { @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-surface text-text transition; }
+.btn:hover { @apply border-accent/40; }
+.btn-primary { @apply bg-accent/15 border-accent/30; }
+.btn-primary:hover { @apply bg-accent/25 border-accent; }
+
+.input {
+  @apply w-full rounded-xl bg-surface border border-border px-3 py-2 text-text
+         placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/40;
+}
+
+/* ---- Animation utility (breathing CTA) ---- */
+@keyframes breathe {
+  0%,100% { transform: translateY(0) scale(1); }
+  50%     { transform: translateY(-1px) scale(1.01); }
+}
+@utility breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Utility component styles */
+.btn { @apply inline-flex items-center justify-center rounded-2xl px-4 py-2 border border-border bg-panel hover:bg-panel/70 transition-all; }
+.btn-accent { @apply bg-accent text-bg border-transparent hover:opacity-95; }
+.input { @apply rounded-2xl bg-panel border border-border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/30; }
+.card { @apply rounded-2xl bg-panel border border-border shadow-[var(--shadow-soft)]; }
+.breathe { animation: breathe 3s ease-in-out infinite; }
+@keyframes breathe { 0%,100%{ transform: translateZ(0) scale(1); } 50%{ transform: translateZ(0) scale(1.02); } }

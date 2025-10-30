@@ -1,36 +1,48 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
 
+class Formality(str, Enum):
+    CASUAL = "casual"
+    BUSINESS_CASUAL = "business_casual"
+    SEMI_FORMAL = "semi_formal"
+    FORMAL = "formal"
+
+class Season(str, Enum):
+    SUMMER = "summer"
+    WINTER = "winter"
+    ALL_SEASON = "all_season"
+    SPRING = "spring"
+    FALL = "fall"
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    display_name: str
-
-    # back-reference: one user has many items
-    items: list["Item"] = Relationship(back_populates="user")
-
+    name: str
+    gender: Optional[str] = None
+    city: Optional[str] = None
+    style_preferences: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    items: List['Item'] = Relationship(back_populates='user')
 
 class Item(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key='user.id')
+    image_url: str  # relative path under /storage
+    original_filename: Optional[str] = None
 
-    # who owns this item
-    user_id: int = Field(foreign_key="user.id")
-
-    # file info
-    original_filename: str
-    stored_path: str                    # path under backend/storage/
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # text fields that the future LLM can fill, user can edit
+    # predicted/edited attributes
+    outfit_part: Optional[str] = None
     category: Optional[str] = None
-    color: Optional[str] = None
-    season: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
     formality: Optional[str] = None
+    season: Optional[str] = None
+    is_graphic: Optional[bool] = None
+    target_gender: Optional[str] = None
+    gender_source: Optional[str] = None
     notes: Optional[str] = None
-    verified: bool = Field(default=False)
+    verified: bool = False
 
-    source: Optional[str] = None        # "llm" or "manual"
-
-    # relationship to the user
-    user: Optional[User] = Relationship(back_populates="items")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    user: Optional[User] = Relationship(back_populates='items')
