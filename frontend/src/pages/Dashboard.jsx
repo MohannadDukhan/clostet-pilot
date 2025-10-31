@@ -174,26 +174,93 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div className="grid gap-2 text-sm">
-                      <Input
-                        label="Category"
-                        value={e.category}
-                        onChange={(v) => onChange(it.id, "category", v)}
-                      />
+                      <label className="text-xs font-medium mb-1">Outfit Part</label>
+                      <select
+                        className="input w-full"
+                        value={e.outfit_part || it.outfit_part || ""}
+                        onChange={ev => onChange(it.id, "outfit_part", ev.target.value)}
+                      >
+                        <option value="">Select outfit part</option>
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                        <option value="dress">Dress</option>
+                        <option value="outerwear">Outerwear</option>
+                        <option value="shoes">Shoes</option>
+                        <option value="accessory">Accessory</option>
+                      </select>
+                      <label className="text-xs font-medium mb-1">Category</label>
+                      <select
+                        className="input w-full"
+                        value={e.category || it.category || ""}
+                        onChange={ev => onChange(it.id, "category", ev.target.value)}
+                      >
+                        <option value="">Select category</option>
+                        <option value="t_shirt">T-Shirt</option>
+                        <option value="shirt">Shirt</option>
+                        <option value="polo">Polo</option>
+                        <option value="sweater">Sweater</option>
+                        <option value="tank_top">Tank Top</option>
+                        <option value="hoodie">Hoodie</option>
+                        <option value="dress">Dress</option>
+                        <option value="crop_top">Crop Top</option>
+                        <option value="leggings">Leggings</option>
+                        <option value="shorts">Shorts</option>
+                        <option value="skirt">Skirt</option>
+                        <option value="pants">Pants</option>
+                        <option value="jeans">Jeans</option>
+                        <option value="chinos">Chinos</option>
+                        <option value="jacket">Jacket</option>
+                        <option value="coat">Coat</option>
+                        <option value="blazer">Blazer</option>
+                        <option value="cardigan">Cardigan</option>
+                        <option value="leather_jacket">Leather Jacket</option>
+                        <option value="puffer_jacket">Puffer Jacket</option>
+                        <option value="sneakers">Sneakers</option>
+                        <option value="boots">Boots</option>
+                        <option value="sandals">Sandals</option>
+                        <option value="dress_shoes">Dress Shoes</option>
+                        <option value="heels">Heels</option>
+                        <option value="flats">Flats</option>
+                        <option value="loafers">Loafers</option>
+                        <option value="hat">Hat</option>
+                        <option value="scarf">Scarf</option>
+                        <option value="belt">Belt</option>
+                        <option value="bag">Bag</option>
+                        <option value="jewelry">Jewelry</option>
+                        <option value="watch">Watch</option>
+                      </select>
                       <Input
                         label="Primary color"
                         value={e.primary_color}
                         onChange={(v) => onChange(it.id, "primary_color", v)}
                       />
-                      <Input
-                        label="Season"
-                        value={e.season}
-                        onChange={(v) => onChange(it.id, "season", v)}
-                      />
-                      <Input
-                        label="Formality"
-                        value={e.formality}
-                        onChange={(v) => onChange(it.id, "formality", v)}
-                      />
+                      <label className="text-xs font-medium mb-1">Formality</label>
+                      <select
+                        className="input w-full"
+                        value={e.formality || it.formality || ""}
+                        onChange={ev => onChange(it.id, "formality", ev.target.value)}
+                      >
+                        <option value="">Select formality</option>
+                        <option value="casual">Casual</option>
+                        <option value="smart_casual">Smart Casual</option>
+                        <option value="semi_formal">Semi Formal</option>
+                        <option value="formal">Formal</option>
+                        <option value="business_casual">Business Casual</option>
+                        <option value="sporty">Sporty</option>
+                      </select>
+                      <label className="text-xs font-medium mb-1">Season</label>
+                      <select
+                        className="input w-full"
+                        value={e.season || it.season || ""}
+                        onChange={ev => onChange(it.id, "season", ev.target.value)}
+                      >
+                        <option value="">Select season</option>
+                        <option value="summer">Summer</option>
+                        <option value="winter">Winter</option>
+                        <option value="all_season">All Season</option>
+                        <option value="spring">Spring</option>
+                        <option value="fall">Fall</option>
+                      </select>
                       <TextArea
                         label="Notes"
                         value={e.notes}

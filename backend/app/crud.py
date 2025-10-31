@@ -70,6 +70,9 @@ def update_item_classification(session: Session, item_id: int, data: dict) -> It
     if not item:
         raise ValueError("item not found")
 
+    if data.get("outfit_part"):
+        item.outfit_part = data["outfit_part"]
+
     # direct
     if data.get("category"):
         item.category = data["category"]

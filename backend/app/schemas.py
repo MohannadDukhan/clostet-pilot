@@ -2,11 +2,8 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 from enum import Enum
-
-# Gender enum for schemas
-class Gender(str, Enum):
-    male = "male"
-    female = "female"
+from .enums import Season, Gender, OutfitPart, Formality
+from .models import Season, Formality, OutfitPart
 
 class UserCreate(BaseModel):
     name: str
@@ -27,20 +24,27 @@ class UserRead(BaseModel):
 class ItemClassification(BaseModel):
     category: str
     color: str
-    season: str
-    formality: str
+    season: Season
+    formality: Formality
+
+    id: int
+    user_id: int
+    image_url: str
+    original_filename: Optional[str] = None
+
+
 
 class ItemRead(BaseModel):
     id: int
     user_id: int
     image_url: str
     original_filename: Optional[str] = None
-    outfit_part: Optional[str] = None
+    outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
-    formality: Optional[str] = None
-    season: Optional[str] = None
+    formality: Optional[Formality] = None
+    season: Optional[Season] = None
     is_graphic: Optional[bool] = None
     target_gender: Optional[str] = None
     gender_source: Optional[str] = None
@@ -51,12 +55,12 @@ class ItemRead(BaseModel):
         from_attributes = True
 
 class ItemUpdate(BaseModel):
-    outfit_part: Optional[str] = None
+    outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
-    formality: Optional[str] = None
-    season: Optional[str] = None
+    formality: Optional[Formality] = None
+    season: Optional[Season] = None
     is_graphic: Optional[bool] = None
     target_gender: Optional[str] = None
     gender_source: Optional[str] = None

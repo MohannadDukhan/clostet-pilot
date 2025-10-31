@@ -1,26 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
-from enum import Enum
+from .enums import Season, Gender, OutfitPart, Formality
 from sqlmodel import SQLModel, Field, Relationship
-
-class Formality(str, Enum):
-    CASUAL = "casual"
-    BUSINESS_CASUAL = "business_casual"
-    SEMI_FORMAL = "semi_formal"
-    FORMAL = "formal"
-
-class Season(str, Enum):
-    SUMMER = "summer"
-    WINTER = "winter"
-    ALL_SEASON = "all_season"
-    SPRING = "spring"
-    FALL = "fall"
-
-
-# Gender enum for strict validation
-class Gender(str, Enum):
-    male = "male"
-    female = "female"
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -38,12 +19,12 @@ class Item(SQLModel, table=True):
     original_filename: Optional[str] = None
 
     # predicted/edited attributes
-    outfit_part: Optional[str] = None
+    outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
-    formality: Optional[str] = None
-    season: Optional[str] = None
+    formality: Optional[Formality] = None
+    season: Optional[Season] = None
     is_graphic: Optional[bool] = None
     target_gender: Optional[str] = None
     gender_source: Optional[str] = None

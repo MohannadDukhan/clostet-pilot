@@ -5,7 +5,7 @@ from sqlmodel import Session
 from typing import List
 from pathlib import Path
 from .db import init_db, get_session
-from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate, ItemClassification, Gender
+from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate, ItemClassification  # ItemClassification was added earlier
 from . import crud
 from .config import settings
 from .vision import classify_image
@@ -62,7 +62,9 @@ async def upload_item(user_id: int, file: UploadFile = File(...), session: Sessi
             # resolve absolute path for the saved file
             abs_path = (STORAGE_DIR / item.image_url).resolve()
             pred = classify_image(str(abs_path))
+            print(pred)
             item = crud.update_item_classification(session, item.id, pred)
+            print(item)
         except Exception as e:
             # don't fail the upload if classifier errors out
             print("auto-classify failed:", e)
