@@ -1,15 +1,13 @@
 from enum import Enum
 
 class Season(str, Enum):
-    summer = "summer"
-    winter = "winter"
-    all_season = "all_season"
     spring = "spring"
+    summer = "summer"
     fall = "fall"
-
-class Gender(str, Enum):
-    male = "male"
-    female = "female"
+    winter = "winter"
+    spring_summer = "spring_summer"
+    fall_winter = "fall_winter"
+    all_season = "all_season"
 
 class OutfitPart(str, Enum):
     top = "top"

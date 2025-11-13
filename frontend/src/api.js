@@ -46,6 +46,13 @@ export async function deleteItem(itemId) {
   await API.delete(`/items/${itemId}`);
 }
 
+export async function suggestOutfit(userId, params = {}) {
+  const q = new URLSearchParams(params).toString();
+  const { data } = await API.get(`/users/${userId}/outfits/suggest${q ? `?${q}` : ""}`);
+  return data;
+}
+
+
 
 // Build a usable <img src> from whatever the backend returns.
 // Supports full URLs, "/storage/..." paths, or just filenames.

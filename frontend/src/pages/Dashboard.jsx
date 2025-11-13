@@ -20,38 +20,38 @@ export default function Dashboard() {
   const user = useMemo(() => getUser(), []);
 
   useEffect(() => {
-  if (!user) {
-    navigate("/create-user", { replace: true });
-    return;
-  }
-  let ignore = false;
-  (async () => {
-    try {
-      const data = await listUserItems(user.id);
-      if (!ignore) {
-        setItems(data || []);
-        const e = {};
-        const exp = {};
-        for (const it of data || []) {
-          e[it.id] = {
-            category: it.category || "",
-            primary_color: it.primary_color || it.color || "",
-            season: it.season || "",
-            formality: it.formality || "",
-            notes: it.notes || "",
-            verified: !!it.verified,
-          };
-          exp[it.id] = false;
-        }
-        setEditMap(e);
-        setExpanded(exp);
-      }
-    } finally {
-      if (!ignore) setLoading(false);
+    if (!user) {
+      navigate("/create-user", { replace: true });
+      return;
     }
-  })();
-  return () => { ignore = true; };
-}, [user?.id, navigate]);   // <<— was [user, navigate]
+    let ignore = false;
+    (async () => {
+      try {
+        const data = await listUserItems(user.id);
+        if (!ignore) {
+          setItems(data || []);
+          const e = {};
+          const exp = {};
+          for (const it of data || []) {
+            e[it.id] = {
+              category: it.category || "",
+              primary_color: it.primary_color || it.color || "",
+              season: it.season || "",
+              formality: it.formality || "",
+              notes: it.notes || "",
+              verified: !!it.verified,
+            };
+            exp[it.id] = false;
+          }
+          setEditMap(e);
+          setExpanded(exp);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [user?.id, navigate]);   // <<— was [user, navigate]
 
 
   if (!user) return null;
@@ -62,6 +62,17 @@ export default function Dashboard() {
       [id]: { ...m[id], [key]: value },
     }));
   }
+
+  function formatSeason(value) {
+    if (!value) return value;
+    const map = {
+      spring_summer: "spring / summer",
+      fall_winter: "fall / winter",
+      all_season: "all season",
+    };
+    return map[value] || value;
+  }
+
 
   function toggleExpand(id, state) {
     setExpanded((m) => ({ ...m, [id]: state }));
@@ -112,9 +123,10 @@ export default function Dashboard() {
                   <>
                     <div className="text-xs text-text-muted">
                       {[
+                        e.outfit_part || it.outfit_part,
                         e.category || it.category,
                         colorChip,
-                        e.season || it.season,
+                        formatSeason(e.season || it.season),
                         e.formality || it.formality,
                       ]
                         .filter(Boolean)
@@ -234,33 +246,35 @@ export default function Dashboard() {
                         value={e.primary_color}
                         onChange={(v) => onChange(it.id, "primary_color", v)}
                       />
-                      <label className="text-xs font-medium mb-1">Formality</label>
+                      <label className="text-xs font-medium mb-1">formality</label>
                       <select
                         className="input w-full"
                         value={e.formality || it.formality || ""}
-                        onChange={ev => onChange(it.id, "formality", ev.target.value)}
+                        onChange={(ev) => onChange(it.id, "formality", ev.target.value || null)}
                       >
-                        <option value="">Select formality</option>
-                        <option value="casual">Casual</option>
-                        <option value="smart_casual">Smart Casual</option>
-                        <option value="semi_formal">Semi Formal</option>
-                        <option value="formal">Formal</option>
-                        <option value="business_casual">Business Casual</option>
-                        <option value="sporty">Sporty</option>
+                        <option value="">—</option>
+                        <option value="casual">casual</option>
+                        <option value="smart_casual">smart casual</option>
+                        <option value="semi_formal">semi formal</option>
+                        <option value="formal">formal</option>
                       </select>
-                      <label className="text-xs font-medium mb-1">Season</label>
+
+                      <label className="text-xs font-medium mb-1">season</label>
                       <select
                         className="input w-full"
                         value={e.season || it.season || ""}
-                        onChange={ev => onChange(it.id, "season", ev.target.value)}
+                        onChange={(ev) => onChange(it.id, "season", ev.target.value || null)}
                       >
-                        <option value="">Select season</option>
-                        <option value="summer">Summer</option>
-                        <option value="winter">Winter</option>
-                        <option value="all_season">All Season</option>
-                        <option value="spring">Spring</option>
-                        <option value="fall">Fall</option>
+                        <option value="">—</option>
+                        <option value="spring">spring</option>
+                        <option value="spring_summer">spring / summer</option>
+                        <option value="summer">summer</option>
+                        <option value="fall">fall</option>
+                        <option value="fall_winter">fall / winter</option>
+                        <option value="winter">winter</option>
+                        <option value="all_season">all season</option>
                       </select>
+
                       <TextArea
                         label="Notes"
                         value={e.notes}

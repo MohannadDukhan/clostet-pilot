@@ -1,12 +1,11 @@
 from datetime import datetime
 from typing import Optional, List
-from .enums import Season, Gender, OutfitPart, Formality
+from .enums import Season, OutfitPart, Formality
 from sqlmodel import SQLModel, Field, Relationship
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    gender: Gender
     city: str
     style_preferences: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -26,8 +25,6 @@ class Item(SQLModel, table=True):
     formality: Optional[Formality] = None
     season: Optional[Season] = None
     is_graphic: Optional[bool] = None
-    target_gender: Optional[str] = None
-    gender_source: Optional[str] = None
     notes: Optional[str] = None
     verified: bool = False
 

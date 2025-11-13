@@ -1,2 +1,17 @@
+# Global ignores
+.DS_Store
+Thumbs.db
+
+# Node
 node_modules/
 dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/

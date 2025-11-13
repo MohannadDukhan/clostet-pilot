@@ -1,6 +1,6 @@
 import json, re
 from typing import Literal, TypedDict
-from .enums import Season, Gender, OutfitPart, Formality
+from .enums import Season, OutfitPart, Formality
 from .enums import Category
 from .config import settings
 
@@ -18,7 +18,6 @@ class Prediction(TypedDict):
     color: str
     season: str
     formality: str
-    gender: str
 
 def _normalize(val: str, allowed: list[str], default: str) -> str:
     v = val.strip().lower()
@@ -41,46 +40,94 @@ def _postprocess(p: dict) -> Prediction:
     cat = _normalize(
         p.get("category", "other"),
         [e.value for e in Category],
-        "other"
+        "other",
     )
     outfit_part = _normalize(
         p.get("outfit_part", "other"),
         [e.value for e in OutfitPart] + ["other"],
-        "other"
+        "other",
     )
     print(outfit_part)
 
     col = _normalize(
         p.get("color", "multicolor"),
-        ["black", "white", "gray", "navy", "blue", "green", "red", "yellow", "orange", "brown",
-         "beige", "cream", "purple", "pink", "multicolor"],
-        "multicolor"
+        [
+            "black", "white", "gray", "navy", "blue", "green", "red", "yellow",
+            "orange", "brown", "beige", "cream", "purple", "pink", "multicolor",
+        ],
+        "multicolor",
     )
 
-    sea = _normalize(
-        p.get("season", "all_season"),
-        [e.value for e in Season],
-        "all_season"
-    )
+    # NEW season logic
+    raw_season = p.get("season", "all_season")
 
-    frm = _normalize(
-        p.get("formality", "casual"),
-        [e.value for e in Formality],
-        "casual"
-    )
+    # Handle AI returning a list, comma-separated string, or single value
+    if isinstance(raw_season, list):
+        parts = raw_season
+    else:
+        parts = [
+            s.strip()
+            for s in str(raw_season)
+            .replace("/", ",")
+            .replace("-", "_")
+            .split(",")
+        ]
 
-    gen = p.get("gender", "").strip().lower()
-    if gen not in ["male", "female", "unisex", "unknown"]:
-        gen = "unknown"
+    # Normalize each part
+    valid = [e.value for e in Season]
+    parts = [s for s in parts if s in valid]
+
+    # Reduce to at most 2 seasons
+    if len(parts) > 2:
+        parts = parts[:2]
+
+    # If 2 parts match a known combo, join them (fall+winter → fall_winter)
+    joined = "_".join(parts)
+    if joined in valid:
+        season = joined
+    elif parts:
+        season = parts[0]
+    else:
+        season = "all_season"
+
+    # ----- formality normalization -----
+    raw_form = str(p.get("formality", "casual")).lower().strip()
+
+    allowed = [e.value for e in Formality]
+
+    # simple mapping for common synonyms
+    if raw_form in allowed:
+        formality = raw_form
+    elif raw_form in {"sporty", "athletic", "gym", "streetwear"}:
+        formality = "casual"
+    elif raw_form in {"business_casual"}:
+        formality = "smart_casual"
+    elif raw_form in {"business", "dressy"}:
+        formality = "semi_formal"
+    elif "formal" in raw_form:
+        formality = "formal"
+    else:
+        formality = "casual"
+
+    # category-based minimums to fix suits / dress pants / blazers
+    cat_lower = (cat or "").lower()
+    if any(x in cat_lower for x in ["suit", "dress_pant", "trouser"]):
+        # suit pieces and dress pants should never be below semi_formal
+        if formality in ["casual", "smart_casual"]:
+            formality = "semi_formal"
+    if any(x in cat_lower for x in ["blazer", "sport_coat"]):
+        if formality in ["casual", "smart_casual"]:
+            formality = "semi_formal"
 
     return {
         "category": cat,
         "outfit_part": outfit_part,
         "color": col,
-        "season": sea,
-        "formality": frm,
-        "gender": gen,
+        "season": season,
+        "formality": formality,
     }
+
+
 
 
 
@@ -102,27 +149,42 @@ def classify_with_openai(image_path: str) -> Prediction:
     client = OpenAI(api_key=settings.openai_api_key)
 
     prompt = (
-    "You are an AI wardrobe assistant analyzing a single clothing photo. "
-    "Focus on the main clothing item, ignoring background (bed, floor, other objects). "
-    "If the background is cluttered, estimate best you can. "
-    "Return STRICT JSON with the keys: category, outfit_part, color, season, formality, gender.\n"
-    "Allowed values:\n"
-    f"- category: {', '.join([e.value for e in Category])}\n"
-    f"- outfit_part: {', '.join([e.value for e in OutfitPart])}, other\n"
-    "- color: black, white, gray, navy, blue, green, red, yellow, orange, brown, beige, cream, purple, pink, multicolor\n"
-    f"- season: {', '.join([e.value for e in Season])}\n"
-    f"- formality: {', '.join([e.value for e in Formality])}\n"
-    "- gender: male, female, unisex, unknown\n"
-    "Example output: {"
-    "\"outfit_part\":\"top\"," 
-    "\"category\":\"sweater\","
-    "\"color\":\"navy\"," 
-    "\"season\":\"winter\"," 
-    "\"formality\":\"casual\"," 
-    "\"gender\":\"male\"" 
-    "}"
-    "Do not add commentary or explanations. Output JSON only."
+        "You are an AI wardrobe assistant analyzing a single clothing photo. "
+        "Focus on the main clothing item, ignoring background (bed, floor, other objects). "
+        "If the background is cluttered, estimate best you can. "
+        "Return STRICT JSON with the keys: category, outfit_part, color, season, formality.\n"
+        "Allowed values:\n"
+        f"- category: {', '.join([e.value for e in Category])}\n"
+        f"- outfit_part: {', '.join([e.value for e in OutfitPart])}, other\n"
+        "- color: black, white, gray, navy, blue, green, red, yellow, orange, brown, beige, cream, purple, pink, multicolor\n"
+        f"- season: {', '.join([e.value for e in Season])}\n"
+        f"- formality: {', '.join([e.value for e in Formality])}\n"
+        "SEASON RULES:\n"
+        "- Choose ONE OR TWO seasons maximum.\n"
+        "- Allowed values: spring, summer, fall, winter, spring_summer, fall_winter, all_season.\n"
+        "- Use spring_summer for light warm-weather items (t-shirts, polos, shorts, linen shirts).\n"
+        "- Use fall_winter for medium-weight items (hoodies, sweaters, bomber jackets, leather jackets).\n"
+        "- Use winter ONLY for thick padded jackets, down jackets, parkas, or visibly insulated coats.\n"
+        "- Use fall for light jackets, flannels, cardigans, or light sweaters.\n"
+        "- Use all_season for items usable year-round (jeans, chinos, basic t-shirts).\n"
+        "FORMALITY RULES:\n"
+        "- Allowed values: casual, smart_casual, semi_formal, formal.\n"
+        "- Treat gym wear, hoodies, t-shirts, sweatpants, shorts, sneakers as casual.\n"
+        "- Treat polos, nice knitwear, chinos, clean sneakers/loafers as smart_casual.\n"
+        "- Treat blazers, sport coats, dress shirts, dress pants as at least semi_formal.\n"
+        "- Treat full suits, suit jackets with matching dress pants, and ties as formal.\n"
+        "Example output: {"
+        "\"outfit_part\":\"top\","
+        "\"category\":\"sweater\","
+        "\"color\":\"navy\","
+        "\"season\":\"fall_winter\","
+        "\"formality\":\"smart_casual\""
+        "}"
+        "Do not add commentary or explanations. Output JSON only."
     )
+
+    ...
+
 
     with open(image_path, "rb") as f:
         b64 = __import__("base64").b64encode(f.read()).decode("utf-8")
@@ -175,7 +237,6 @@ def classify_with_openai(image_path: str) -> Prediction:
             "color": "multicolor",
             "season": "all_season",
             "formality": "casual",
-            "gender": "unknown",
         }
 
     return _postprocess(raw)

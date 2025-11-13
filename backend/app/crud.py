@@ -2,23 +2,22 @@ import uuid
 from pathlib import Path
 from typing import Iterable, Optional, List
 from sqlmodel import Session, select
-from .models import User, Item, Gender
+from .models import User, Item
 
 # storage root: backend/storage
 STORAGE_ROOT = Path(__file__).resolve().parent.parent / "storage"
 
-def create_user(session: Session, name: str, gender: str, city: str, style_preferences: Optional[str]) -> User:
+def create_user(session: Session, name: str, city: str, style_preferences: Optional[str]) -> User:
     # normalize empty style_preferences to None
     if style_preferences is not None and style_preferences.strip() == "":
         style_preferences = None
-    # convert gender string to Gender enum if needed
-    if isinstance(gender, str):
-        gender = Gender(gender)
-    user = User(name=name, gender=gender, city=city, style_preferences=style_preferences)
+
+    user = User(name=name, city=city, style_preferences=style_preferences)
     session.add(user)
     session.commit()
     session.refresh(user)
     return user
+
 
 def list_users(session: Session) -> Iterable[User]:
     return session.exec(select(User).order_by(User.id)).all()
