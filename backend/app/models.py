@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Optional, List
-from .enums import Season, OutfitPart, Formality
+
 from sqlmodel import SQLModel, Field, Relationship
+
+from .enums import Season, OutfitPart, Formality
+
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -9,11 +12,17 @@ class User(SQLModel, table=True):
     city: str
     style_preferences: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    items: List['Item'] = Relationship(back_populates='user')
+
+    # relationships
+    items: List["Item"] = Relationship(back_populates="user")
+    outfits: List["Outfit"] = Relationship(back_populates="user")
+
 
 class Item(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key='user.id')
+    user_id: int = Field(foreign_key="user.id")
+
+    # file info
     image_url: str  # relative path under /storage
     original_filename: Optional[str] = None
 
@@ -29,4 +38,34 @@ class Item(SQLModel, table=True):
     verified: bool = False
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    user: Optional[User] = Relationship(back_populates='items')
+
+    # relationships
+    user: Optional["User"] = Relationship(back_populates="items")
+
+
+class Outfit(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+
+    top_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    bottom_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    shoes_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    accessory_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    outerwear_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    onepiece_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    score: Optional[float] = Field(default=None)
+
+    # relationships
+    user: Optional["User"] = Relationship(back_populates="outfits")
+
+
+class Feedback(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    outfit_id: int = Field(foreign_key="outfit.id")
+    user_id: int = Field(foreign_key="user.id")
+    score: Optional[float] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    user: Optional["User"] = Relationship()
