@@ -1,4 +1,6 @@
 import random
+import requests
+from datetime import date, datetime
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -157,6 +159,96 @@ def classify_item(item_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=500, detail=f"classification failed: {e}")
 
 
+# ---- Weather API ----
+def get_weather(city: str, target_date: date) -> dict:
+    """
+    Get weather forecast using Open-Meteo API.
+    Returns temperature and determines appropriate clothing season.
+    """
+    try:
+        # Step 1: Geocode the city
+        geo_url = "https://geocoding-api.open-meteo.com/v1/search"
+        geo_resp = requests.get(
+            geo_url,
+            params={"name": city, "count": 1, "language": "en", "format": "json"},
+            timeout=5
+        )
+        geo_data = geo_resp.json()
+        
+        if not geo_data.get("results"):
+            raise ValueError(f"City '{city}' not found")
+        
+        lat = geo_data["results"][0]["latitude"]
+        lon = geo_data["results"][0]["longitude"]
+        
+        # Step 2: Get weather forecast
+        weather_url = "https://api.open-meteo.com/v1/forecast"
+        weather_resp = requests.get(
+            weather_url,
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "daily": "temperature_2m_max,temperature_2m_min",
+                "start_date": target_date.isoformat(),
+                "end_date": target_date.isoformat(),
+                "timezone": "auto"
+            },
+            timeout=5
+        )
+        weather_data = weather_resp.json()
+        
+        daily = weather_data.get("daily", {})
+        if not daily or "time" not in daily:
+            raise ValueError("Invalid weather response")
+        
+        idx = daily["time"].index(target_date.isoformat())
+        temp_max = daily["temperature_2m_max"][idx]
+        temp_min = daily["temperature_2m_min"][idx]
+        
+        # Representative temperature (weighted toward cooler for outfit planning)
+        temp = temp_min * 0.7 + temp_max * 0.3
+        
+        # Determine clothing season based on actual temperature
+        if temp < 5:
+            season = "winter"
+        elif temp < 12:
+            season = "fall"
+        elif temp < 20:
+            season = "spring"
+        else:
+            season = "summer"
+        
+        return {
+            "temperature": round(temp, 1),
+            "temp_min": temp_min,
+            "temp_max": temp_max,
+            "season": season,
+            "city": city,
+        }
+    
+    except Exception as e:
+        # Fallback: use calendar month for Northern Hemisphere
+        print(f"Weather API failed: {e}. Using calendar-based fallback.")
+        month = target_date.month
+        
+        if month in [12, 1, 2]:
+            season, temp = "winter", 0
+        elif month in [3, 4, 5]:
+            season, temp = "spring", 12
+        elif month in [6, 7, 8]:
+            season, temp = "summer", 22
+        else:
+            season, temp = "fall", 10
+        
+        return {
+            "temperature": temp,
+            "temp_min": temp - 5,
+            "temp_max": temp + 5,
+            "season": season,
+            "city": city,
+        }
+
+
 # ---- rule-based outfit suggestions ----
 def _fits_season(item, season: Optional[str]) -> bool:
     item_season = getattr(item, "season", None)
@@ -256,15 +348,35 @@ def _parse_id_list(raw: Optional[str]) -> set[int]:
 @app.get("/users/{user_id}/outfits/suggest")
 def suggest_outfit(
     user_id: int,
-    season: Optional[str] = None,      # "winter","summer","spring","fall","all_season","any"
-    formality: Optional[str] = None,   # "casual","smart_casual","semi_formal","formal","any"
-    anchor_ids: Optional[str] = None,  # e.g. "12,15" -> items we MUST try to include
-    exclude_ids: Optional[str] = None, # e.g. "3,4"  -> items we MUST NOT use
+    outfit_date: Optional[str] = None,  # date for the outfit (e.g. "2025-11-22")
+    formality: Optional[str] = None,    # "casual","smart_casual","semi_formal","formal","any"
+    anchor_ids: Optional[str] = None,   # e.g. "12,15" -> items we MUST try to include
+    exclude_ids: Optional[str] = None,  # e.g. "3,4"  -> items we MUST NOT use
     session: Session = Depends(get_session),
 ):
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
+    
+    if not user.city:
+        raise HTTPException(400, "User has no city set. Cannot determine weather.")
+    
+    # Parse date or use today
+    if outfit_date:
+        try:
+            target_date = datetime.strptime(outfit_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, f"Invalid date format: {outfit_date}. Use YYYY-MM-DD")
+    else:
+        target_date = date.today()
+    
+    # Get weather and determine season from actual temperature
+    weather = get_weather(user.city, target_date)
+    season = weather["season"]
+    
+    print(f"📍 {weather['city']} on {target_date}")
+    print(f"🌡️  Temperature: {weather['temperature']}°C (range: {weather['temp_min']}-{weather['temp_max']}°C)")
+    print(f"🍂 Clothing season: {season}")
 
     all_items = crud.list_items_for_user(session, user_id)
 
@@ -403,6 +515,7 @@ def suggest_outfit(
             "season": it.season,
             "image_url": it.image_url,
         }
+    #print("SUGGESTED OUTFIT:", outfit)
 
     return {k: _pack(v) for k, v in outfit.items()}
 
