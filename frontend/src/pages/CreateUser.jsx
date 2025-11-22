@@ -9,10 +9,19 @@ export default function CreateUser() {
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [error, setError] = useState(null);
+  const [showCityWarning, setShowCityWarning] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault(); // stops page from reloading after form submission
+    
+    // Check if city is missing and show fancy warning
+    if (!city.trim()) {
+      setShowCityWarning(true);
+      setTimeout(() => setShowCityWarning(false), 3000);
+      return;
+    }
+    
     const payload = {
       name: name.trim(),
       city: city.trim(),
@@ -69,9 +78,10 @@ export default function CreateUser() {
           <label className="block text-sm text-text-muted mb-1">City</label>
           <input
             className="w-full rounded-xl bg-panel border border-border px-3 py-2 outline-none focus:border-accent/80"
-            placeholder="optional"
+            placeholder="where do you live?"
             value={city}
             onChange={(e) => setCity(e.target.value)}
+            required
           />
         </div>
 
@@ -82,6 +92,27 @@ export default function CreateUser() {
           Continue
         </button>
       </form>
+
+      {/* Fancy city warning modal */}
+      {showCityWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-gradient-to-br from-orange-500 to-red-500 p-8 rounded-3xl shadow-2xl max-w-md mx-4 animate-bounceIn transform scale-100">
+            <div className="text-center">
+              <div className="text-6xl mb-4 animate-pulse">🌍</div>
+              <h3 className="text-2xl font-bold text-white mb-2">Hold on!</h3>
+              <p className="text-white/90 text-lg mb-4">
+                We need to know your city to give you weather-appropriate outfit suggestions!
+              </p>
+              <button
+                onClick={() => setShowCityWarning(false)}
+                className="bg-white text-orange-600 font-semibold px-6 py-3 rounded-full hover:bg-orange-50 transition-all transform hover:scale-105"
+              >
+                Got it! 👍
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 p-3 rounded bg-red-100 text-red-800 border border-red-200">

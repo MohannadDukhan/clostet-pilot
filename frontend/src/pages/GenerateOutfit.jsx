@@ -11,24 +11,12 @@ function imageSrc(item) {
   return `${base}${path}`;
 }
 
-const SEASONS = [
-  { value: "any", label: "any" },
-  { value: "all_season", label: "all season" },
-  { value: "spring", label: "spring" },
-  { value: "spring_summer", label: "spring / summer" },
-  { value: "summer", label: "summer" },
-  { value: "fall", label: "fall" },
-  { value: "fall_winter", label: "fall / winter" },
-  { value: "winter", label: "winter" },
-];
-
-
 const FORMALITY = [
-  { value: "any", label: "any" },
-  { value: "casual", label: "casual" },
-  { value: "smart_casual", label: "smart casual" },
-  { value: "semi_formal", label: "semi formal" },
-  { value: "formal", label: "formal" },
+  { value: "any", label: "Any Occasion" },
+  { value: "casual", label: "Casual" },
+  { value: "smart_casual", label: "Smart Casual" },
+  { value: "semi_formal", label: "Semi Formal" },
+  { value: "formal", label: "Formal" },
 ];
 
 
@@ -41,8 +29,11 @@ export default function GenerateOutfit() {
   const [anchorIds, setAnchorIds] = useState([]);
   const [excludeIds, setExcludeIds] = useState([]);
 
-  const [season, setSeason] = useState("any");
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
   const [formality, setFormality] = useState("any");
+  const [outfitDate, setOutfitDate] = useState("");
+
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -93,6 +84,14 @@ export default function GenerateOutfit() {
     })();
   }, [userId]);
 
+  // Set default date to today
+  useEffect(() => {
+    if (!outfitDate) {
+      const today = new Date().toISOString().split('T')[0];
+      setOutfitDate(today);
+    }
+  }, [outfitDate]);
+
   function toggleAnchor(id) {
     setAnchorIds((prev) => {
       const exists = prev.includes(id);
@@ -113,18 +112,28 @@ export default function GenerateOutfit() {
     setAnchorIds((prev) => prev.filter((x) => x !== id));
   }
 
-
-
-  async function handleGenerate(e) {
-    e.preventDefault();
+  function openGenerateModal() {
     if (!userId) {
-      setErr("select a user first");
+      setErr("Select a user first");
       return;
     }
+    setShowModal(true);
+    setErr("");
+  }
+
+  async function handleGenerateSubmit(e) {
+    e.preventDefault();
+    if (!userId || !outfitDate) {
+      setErr("Please select date");
+      return;
+    }
+    
     setLoading(true);
     setErr("");
+    setShowModal(false);
+    
     try {
-      const params = { season, formality };
+      const params = { formality, outfit_date: outfitDate };
 
       if (anchorIds.length) {
         params.anchor_ids = anchorIds.join(",");
@@ -134,10 +143,10 @@ export default function GenerateOutfit() {
       }
 
       const data = await suggestOutfit(userId, params);
-
       setSuggestion(data);
-    } catch {
-      setErr("failed to generate outfit");
+    } catch (error) {
+      setErr("Failed to generate outfit. Make sure you have items uploaded and city is set.");
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -146,56 +155,102 @@ export default function GenerateOutfit() {
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8">
       <h1 className="text-2xl font-semibold">Outfit Generator</h1>
-      <p className="text-text-muted mt-1">rule-based v1 while we build model-b</p>
+      <p className="text-text-muted mt-1">AI-powered weather-based outfit suggestions</p>
 
-      {/* user + filters */}
-      <form className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4" onSubmit={handleGenerate}>
-        <div className="card p-4">
-          <label className="text-sm text-text-muted">User</label>
-          <select
-            className="mt-2 w-full bg-panel border border-border rounded-xl p-2"
-            value={userId ?? ""}
-            onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)}
-          >
-            {!users.length && <option value="">No users</option>}
-            {users.map(u => (
-              <option key={u.id} value={u.id}>{u.name} • {u.city}</option>
-            ))}
-          </select>
-        </div>
+      {/* User Selection */}
+      <div className="mt-6 card p-6">
+        <label className="text-sm text-text-muted">Select User</label>
+        <select
+          className="mt-2 w-full bg-panel border border-border rounded-xl p-3 text-lg"
+          value={userId ?? ""}
+          onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)}
+        >
+          {!users.length && <option value="">No users</option>}
+          {users.map(u => (
+            <option key={u.id} value={u.id}>{u.name} • {u.city}</option>
+          ))}
+        </select>
+      </div>
 
-        <div className="card p-4">
-          <label className="text-sm text-text-muted">Season</label>
-          <select
-            className="mt-2 w-full bg-panel border border-border rounded-xl p-2"
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-          >
-            {SEASONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </div>
+      {/* Generate Button */}
+      <div className="mt-6 flex justify-center">
+        <button
+          className="rounded-3xl px-12 py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold text-lg shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          onClick={openGenerateModal}
+          disabled={!userId || loading}
+        >
+          {loading ? "Generating..." : "✨ Generate Outfit"}
+        </button>
+      </div>
 
-        <div className="card p-4">
-          <label className="text-sm text-text-muted">Formality</label>
-          <select
-            className="mt-2 w-full bg-panel border border-border rounded-xl p-2"
-            value={formality}
-            onChange={(e) => setFormality(e.target.value)}
+      {/* Interactive Modal */}
+      {showModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            className="bg-panel border border-border rounded-3xl p-8 max-w-md w-full shadow-2xl animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+            style={{ animation: "bounceIn 0.5s ease-out" }}
           >
-            {FORMALITY.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-        </div>
+            <h2 className="text-2xl font-bold mb-2">Plan Your Outfit</h2>
+            <p className="text-text-muted mb-6">Tell us about your day</p>
 
-        <div className="card p-4 flex items-end">
-          <button
-            className="w-full rounded-2xl px-4 py-2 bg-green-400/80 hover:bg-green-400 transition breathe"
-            type="submit"
-            disabled={loading || !userId}
-          >
-            {loading ? "Generating..." : "Generate"}
-          </button>
+            <form onSubmit={handleGenerateSubmit} className="space-y-6">
+              {/* Date Selection */}
+              <div>
+                <label className="block text-sm font-medium mb-2">📅 When are you going?</label>
+                <input
+                  type="date"
+                  className="w-full bg-background border border-border rounded-xl p-3 text-lg"
+                  value={outfitDate}
+                  onChange={(e) => setOutfitDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Formality Selection */}
+              <div>
+                <label className="block text-sm font-medium mb-2">👔 What's the occasion?</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {FORMALITY.map(f => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      className={`p-3 rounded-xl border-2 transition-all ${
+                        formality === f.value
+                          ? "border-purple-500 bg-purple-500/10 font-semibold"
+                          : "border-border hover:border-purple-300"
+                      }`}
+                      onClick={() => setFormality(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-3 rounded-xl border border-border hover:bg-panel/50 transition"
+                  onClick={() => setShowModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
+                >
+                  Generate
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
+      )}
 
       {/* include / exclude items for this suggestion */}
       {userId && items.length > 0 && (
@@ -287,44 +342,104 @@ export default function GenerateOutfit() {
       )}
 
 
-      {err && <div className="mt-4 text-red-400">{err}</div>}
+      {err && (
+        <div className="mt-6 card p-4 bg-red-500/10 border-red-400/50">
+          <p className="text-red-400">{err}</p>
+        </div>
+      )}
 
+      {/* Beautiful Outfit Display */}
       {suggestion && (
-        <div className="mt-8">
-          <h2 className="text-lg font-medium mb-3">Suggestion</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {["top", "bottom", "outer", "shoes"].map((part) => {
-              const it = suggestion[part];
-              return (
-                <div key={part} className="card p-4">
-                  <div className="text-sm text-text-muted">{part}</div>
-                  {it ? (
-                    <>
-                      {it.image_url ? (
-                        <img
-                          className="mt-2 w-full h-40 object-cover rounded-xl"
-                          src={imageSrc(it)}
-                          alt={it.category || it.outfit_part || part}
-                          loading="lazy"
-                        />
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-gradient-to-br from-panel to-background border border-border rounded-3xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Your Perfect Outfit
+              </h2>
+              <p className="text-text-muted mt-2">✨ Curated just for you</p>
+            </div>
+
+            {/* Outfit Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+              {["top", "bottom", "outer", "shoes"].map((part) => {
+                const it = suggestion[part];
+                // Skip outer if it's empty
+                if (part === "outer" && !it) return null;
+
+                return (
+                  <div 
+                    key={part} 
+                    className="relative group"
+                    style={{ animation: `bounceIn 0.6s ease-out ${part === "top" ? "0s" : part === "bottom" ? "0.1s" : part === "outer" ? "0.2s" : "0.3s"}` }}
+                  >
+                    <div className="card p-4 hover:shadow-xl transition-shadow">
+                      <div className="text-sm font-medium text-text-muted mb-3 capitalize flex items-center gap-2">
+                        {part === "top" && "👕"}
+                        {part === "bottom" && "👖"}
+                        {part === "outer" && "🧥"}
+                        {part === "shoes" && "👟"}
+                        {part}
+                      </div>
+                      
+                      {it ? (
+                        <>
+                          {it.image_url ? (
+                            <div className="relative">
+                              <img
+                                className="w-full h-48 object-cover rounded-2xl shadow-md"
+                                src={imageSrc(it)}
+                                alt={it.category || it.outfit_part || part}
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          ) : (
+                            <div className="w-full h-48 rounded-2xl bg-panel border-2 border-dashed border-border grid place-items-center">
+                              <span className="text-text-muted text-sm">No image</span>
+                            </div>
+                          )}
+                          <div className="mt-3">
+                            <div className="font-semibold text-base capitalize">
+                              {it.category || it.outfit_part || "item"}
+                            </div>
+                            <div className="text-xs text-text-muted mt-1 space-y-0.5">
+                              <div>🎨 {it.primary_color || "unknown"}</div>
+                              {it.formality && it.formality !== "any" && (
+                                <div>👔 {it.formality}</div>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       ) : (
-                        <div className="mt-2 w-full h-40 rounded-xl bg-panel border border-border grid place-items-center">
-                          <span className="text-text-muted text-sm">no image</span>
+                        <div className="w-full h-48 rounded-2xl bg-panel/50 border-2 border-dashed border-border/50 grid place-items-center opacity-40">
+                          <span className="text-text-muted text-sm">—</span>
                         </div>
                       )}
-                      <div className="mt-2 text-sm">{it.category || it.outfit_part || "item"}</div>
-                      <div className="text-xs text-text-muted">
-                        {(it.primary_color || "unknown")} · {(it.formality || "n/a")} · {(it.season || "n/a")}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="mt-2 w-full h-40 rounded-xl bg-panel border border-border grid place-items-center opacity-60">
-                      <span className="text-text-muted text-sm">—</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4 justify-center">
+              <button
+                className="px-8 py-3 rounded-2xl border border-border hover:bg-panel transition"
+                onClick={() => setSuggestion(null)}
+              >
+                Close
+              </button>
+              <button
+                className="px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
+                onClick={() => {
+                  setSuggestion(null);
+                  openGenerateModal();
+                }}
+              >
+                Generate Another
+              </button>
+            </div>
           </div>
         </div>
       )}
