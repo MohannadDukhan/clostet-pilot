@@ -29,6 +29,15 @@ export default function GenerateOutfit() {
   const [anchorIds, setAnchorIds] = useState([]);
   const [excludeIds, setExcludeIds] = useState([]);
 
+  const hasTop = items.some(
+    (it) => it.outfit_part === "top" || it.outfit_part === "dress"
+  );
+  const hasBottom = items.some(
+    (it) => it.outfit_part === "bottom" || it.outfit_part === "onepiece"
+  );
+  const hasCorePieces = hasTop && hasBottom;
+
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [formality, setFormality] = useState("any");
@@ -37,6 +46,7 @@ export default function GenerateOutfit() {
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [swappingPart, setSwappingPart] = useState(null);
 
 
   // load users on mount and restore last selection if available
@@ -121,17 +131,66 @@ export default function GenerateOutfit() {
     setErr("");
   }
 
+  async function handleSwap(part) {
+    if (!suggestion || !userId) return;
+
+    // current outfit from the suggestion
+    const outfit = suggestion.outfit || suggestion;
+    const current = outfit[part];
+    if (!current) return;
+
+    // anchor the other parts so only this one can change
+    const otherParts = ["top", "bottom", "outer", "shoes"].filter(
+      (p) => p !== part
+    );
+
+    const anchorFromOutfit = otherParts
+      .map((p) => outfit[p]?.id)
+      .filter(Boolean);
+
+    // combine existing anchors / excludes from the UI with our new ones
+    const anchorParam = Array.from(
+      new Set([...(anchorIds || []), ...anchorFromOutfit])
+    );
+    const excludeParam = Array.from(
+      new Set([...(excludeIds || []), current.id])
+    );
+
+    const params = {
+      formality,
+      outfit_date: outfitDate,
+    };
+
+    if (anchorParam.length) params.anchor_ids = anchorParam.join(",");
+    if (excludeParam.length) params.exclude_ids = excludeParam.join(",");
+
+    setSwappingPart(part);
+    setErr("");
+
+    try {
+      const data = await suggestOutfit(userId, params);
+      setSuggestion(data);
+    } catch (e) {
+      console.error("swap failed", e);
+      setErr("Could not swap this item. Please try again.");
+    } finally {
+      setSwappingPart(null);
+    }
+  }
+
+
   async function handleGenerateSubmit(e) {
     e.preventDefault();
     if (!userId || !outfitDate) {
       setErr("Please select date");
       return;
     }
-    
+
+
     setLoading(true);
     setErr("");
     setShowModal(false);
-    
+
     try {
       const params = { formality, outfit_date: outfitDate };
 
@@ -185,11 +244,11 @@ export default function GenerateOutfit() {
 
       {/* Interactive Modal */}
       {showModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setShowModal(false)}
         >
-          <div 
+          <div
             className="bg-panel border border-border rounded-3xl p-8 max-w-md w-full shadow-2xl animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
             style={{ animation: "bounceIn 0.5s ease-out" }}
@@ -198,6 +257,12 @@ export default function GenerateOutfit() {
             <p className="text-text-muted mb-6">Tell us about your day</p>
 
             <form onSubmit={handleGenerateSubmit} className="space-y-6">
+              {!hasCorePieces && (
+                <div className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
+                  You need at least one top and one bottom in your wardrobe to generate an outfit.
+                  Try uploading a few more pieces first.
+                </div>
+              )}
               {/* Date Selection */}
               <div>
                 <label className="block text-sm font-medium mb-2">📅 When are you going?</label>
@@ -218,11 +283,10 @@ export default function GenerateOutfit() {
                     <button
                       key={f.value}
                       type="button"
-                      className={`p-3 rounded-xl border-2 transition-all ${
-                        formality === f.value
-                          ? "border-purple-500 bg-purple-500/10 font-semibold"
-                          : "border-border hover:border-purple-300"
-                      }`}
+                      className={`p-3 rounded-xl border-2 transition-all ${formality === f.value
+                        ? "border-purple-500 bg-purple-500/10 font-semibold"
+                        : "border-border hover:border-purple-300"
+                        }`}
                       onClick={() => setFormality(f.value)}
                     >
                       {f.label}
@@ -242,10 +306,18 @@ export default function GenerateOutfit() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
+                  disabled={!hasCorePieces || loading}
+                  className={
+                    "flex-1 px-4 py-3 rounded-xl text-white font-semibold transition " +
+                    (!hasCorePieces || loading
+                      ? "bg-gradient-to-r from-purple-500/40 to-pink-500/40 opacity-60 cursor-not-allowed"
+                      : "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                    )
+                  }
                 >
                   Generate
                 </button>
+
               </div>
             </form>
           </div>
@@ -282,13 +354,12 @@ export default function GenerateOutfit() {
               return (
                 <div
                   key={item.id}
-                  className={`rounded-2xl border p-2 text-xs ${
-                    isExcluded
-                      ? "border-red-400/70 bg-red-500/5"
-                      : isAnchor
+                  className={`rounded-2xl border p-2 text-xs ${isExcluded
+                    ? "border-red-400/70 bg-red-500/5"
+                    : isAnchor
                       ? "border-green-400/80 bg-green-400/5"
                       : "border-border bg-panel"
-                  }`}
+                    }`}
                 >
                   <div className="flex justify-between gap-2">
                     <div className="font-medium truncate">
@@ -317,18 +388,16 @@ export default function GenerateOutfit() {
                   <div className="mt-2 flex gap-1">
                     <button
                       type="button"
-                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${
-                        isAnchor ? "bg-green-400/80 text-black border-transparent" : "border-border"
-                      }`}
+                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isAnchor ? "bg-green-400/80 text-black border-transparent" : "border-border"
+                        }`}
                       onClick={() => toggleAnchor(item.id)}
                     >
                       include
                     </button>
                     <button
                       type="button"
-                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${
-                        isExcluded ? "bg-red-400/80 text-black border-transparent" : "border-border"
-                      }`}
+                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isExcluded ? "bg-red-400/80 text-black border-transparent" : "border-border"
+                        }`}
                       onClick={() => toggleExclude(item.id)}
                     >
                       exclude
@@ -340,6 +409,21 @@ export default function GenerateOutfit() {
           </div>
         </div>
       )}
+
+      {userId && items.length === 0 && (
+        <div className="mt-6 card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium">No items in your wardrobe yet</h2>
+            <p className="text-xs text-text-muted mt-1">
+              Upload at least one top and one bottom so we can start building outfits around your clothes.
+            </p>
+          </div>
+          <a href="/upload" className="btn btn-accent text-xs">
+            Upload items
+          </a>
+        </div>
+      )}
+
 
 
       {err && (
@@ -358,18 +442,43 @@ export default function GenerateOutfit() {
                 Your Perfect Outfit
               </h2>
               <p className="text-text-muted mt-2">✨ Curated just for you</p>
+              {/* Weather summary */}
+              {suggestion.weather && (
+                <div className="mt-3 text-sm text-text-muted flex flex-col items-center gap-1">
+                  <div>
+                    <span className="font-medium">
+                      {suggestion.weather.city || "Your city"}
+                    </span>{" "}
+                    · {suggestion.weather.temperature}°C
+                    {" "}
+                    <span className="text-xs text-text-muted">
+                      ({suggestion.weather.temp_min}–{suggestion.weather.temp_max}°C)
+                    </span>
+                  </div>
+                  <div className="text-xs uppercase tracking-wide">
+                    season bucket:{" "}
+                    <span className="font-semibold">
+                      {suggestion.weather.season}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Outfit Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
               {["top", "bottom", "outer", "shoes"].map((part) => {
-                const it = suggestion[part];
+                // Backwards-compat: if backend still returns plain {top,bottom,...},
+                // fall back to suggestion itself.
+                const outfit = suggestion.outfit || suggestion;
+                const it = outfit[part];
+
                 // Skip outer if it's empty
                 if (part === "outer" && !it) return null;
 
                 return (
-                  <div 
-                    key={part} 
+                  <div
+                    key={part}
                     className="relative group"
                     style={{ animation: `bounceIn 0.6s ease-out ${part === "top" ? "0s" : part === "bottom" ? "0.1s" : part === "outer" ? "0.2s" : "0.3s"}` }}
                   >
@@ -381,7 +490,7 @@ export default function GenerateOutfit() {
                         {part === "shoes" && "👟"}
                         {part}
                       </div>
-                      
+
                       {it ? (
                         <>
                           {it.image_url ? (
@@ -410,6 +519,15 @@ export default function GenerateOutfit() {
                               )}
                             </div>
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSwap(part)}
+                            className="mt-3 inline-flex items-center justify-center rounded-full border border-accent/70 px-3 py-1 text-[11px] uppercase tracking-wide text-accent hover:bg-accent/10 transition"
+                            disabled={swappingPart === part}
+                          >
+                            {swappingPart === part ? "Swapping..." : "Swap this piece"}
+                          </button>
                         </>
                       ) : (
                         <div className="w-full h-48 rounded-2xl bg-panel/50 border-2 border-dashed border-border/50 grid place-items-center opacity-40">

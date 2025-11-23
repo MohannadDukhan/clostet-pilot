@@ -80,20 +80,44 @@ export default function Dashboard() {
 
   return (
     <Container>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-semibold">Your Wardrobe</h2>
-        <a href="/upload" className="btn btn-accent breathe">
-          Upload
-        </a>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div>
+          <h2 className="text-2xl font-semibold">Your wardrobe</h2>
+          {user && (
+            <p className="text-xs text-text-muted">
+              signed in as <span className="font-medium">{user.name}</span>
+              {user.city ? ` · ${user.city}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <a href="/upload" className="btn btn-accent breathe">
+            Upload item
+          </a>
+          <a href="/profile" className="btn text-xs">
+            Edit profile
+          </a>
+        </div>
       </div>
+
+
 
       {loading ? (
         <div className="text-text-muted">Loading…</div>
       ) : items.length === 0 ? (
-        <div className="card p-6 text-text-muted">
-          No items yet. Try uploading something.
+        <div className="card p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Your wardrobe is empty.</p>
+            <p className="text-xs text-text-muted mt-1">
+              Start by uploading a few tops and bottoms so Closet Pilot can generate your first outfits.
+            </p>
+          </div>
+          <a href="/upload" className="btn btn-accent text-xs">
+            Upload your first item
+          </a>
         </div>
       ) : (
+
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
           {items.map((it) => {
             const e = editMap[it.id] || {};

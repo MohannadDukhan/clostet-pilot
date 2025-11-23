@@ -21,6 +21,7 @@ class User(SQLModel, table=True):
 class Item(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
+    content_hash: Optional[str] = Field(default=None, index=True)
 
     # file info
     image_url: str  # relative path under /storage

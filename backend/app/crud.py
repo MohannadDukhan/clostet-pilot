@@ -34,12 +34,37 @@ def list_users(session: Session) -> Iterable[User]:
 def get_user(session: Session, user_id: int) -> Optional[User]:
     return session.get(User, user_id)
 
+def update_user(
+    session: Session,
+    user: User,
+    *,
+    name: Optional[str] = None,
+    city: Optional[str] = None,
+    style_preferences: Optional[str] = None,
+) -> User:
+    """Update basic fields on an existing user and persist them."""
+    if name is not None:
+        user.name = name
+    if city is not None:
+        user.city = city
+
+    if style_preferences is not None:
+        style_preferences = style_preferences.strip()
+        user.style_preferences = style_preferences or None
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
 
 def create_item_with_file(
     session: Session,
     user_id: int,
     filename: str,
     content: bytes,
+    content_hash: str,
 ) -> Item:
     user_dir = STORAGE_ROOT / str(user_id)
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -52,11 +77,24 @@ def create_item_with_file(
         user_id=user_id,
         image_url=str(rel).replace("\\", "/"),
         original_filename=filename,
+        content_hash=content_hash,
     )
     session.add(item)
     session.commit()
     session.refresh(item)
     return item
+
+def find_item_by_hash(
+    session: Session,
+    user_id: int,
+    content_hash: str,
+):
+  stmt = (
+      select(Item)
+      .where(Item.user_id == user_id, Item.content_hash == content_hash)
+      .limit(1)
+  )
+  return session.exec(stmt).first()
 
 
 def list_items_for_user(session: Session, user_id: int) -> List[Item]:

@@ -2,14 +2,17 @@ import React, { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Sparkles, Upload, UserPlus, Shirt, Info } from "lucide-react";
 import { listUsers } from "../api";
-export default function Navbar({ user, setUser }) {
-  const navLinkClass = ({ isActive }) =>
-    `px-3 py-2 rounded-xl transition-all hover:opacity-90 ${isActive ? "bg-panel/60 border border-border" : "hover:bg-panel/40"}`;
 
+export default function Navbar({ user, setUser }) {
   const [showSelect, setShowSelect] = useState(false);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const navigate = useNavigate();
+
+  const navLinkClass = ({ isActive }) =>
+    `px-3 py-2 rounded-xl transition-all hover:opacity-90 ${
+      isActive ? "bg-panel/60 border border-border" : "hover:bg-panel/40"
+    }`;
 
   function handleLogout(e) {
     e.preventDefault();
@@ -17,82 +20,179 @@ export default function Navbar({ user, setUser }) {
     setUser(null);
     navigate("/");
   }
-  async function handleSwitchUser(e) {
+
+    function handleEditProfile(e) {
     e.preventDefault();
+    navigate("/profile");
+  }
+
+  async function openUserSelect() {
+    setShowSelect(true);
     setLoadingUsers(true);
     try {
       const allUsers = await listUsers();
-      setUsers(allUsers);
-      setShowSelect(true);
+      setUsers(allUsers || []);
+    } catch (e) {
+      console.error("Failed to load users", e);
     } finally {
       setLoadingUsers(false);
     }
   }
 
   function handleSelectUser(u) {
+    if (!u) return;
     localStorage.setItem("cp:user", JSON.stringify(u));
     setUser(u);
     setShowSelect(false);
-    window.location.href = "/dashboard";
+    navigate("/dashboard");
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-bg/70 backdrop-blur border-b border-border">
-      <nav className="max-w-6xl mx-auto flex items-center justify-between px-4 h-16">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="size-8 rounded-xl bg-gradient-to-br from-accent/90 to-accent/60 shadow-[var(--shadow-soft)] grid place-items-center">
-            <Sparkles className="size-4 text-bg" />
-          </div>
-          <span className="font-semibold tracking-tight">Closet Pilot</span>
-        </Link>
+    <header className="border-b border-border/60">
+      <nav className="max-w-6xl mx-auto px-4 flex items-center justify-between h-16 gap-4">
+        {/* left: logo + nav */}
+        <div className="flex items-center gap-6">
+          <Link to="/" className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-accent text-primary shadow-sm">
+              <Sparkles size={18} />
+            </span>
+            <span className="font-semibold text-sm tracking-wide">
+              Closet Pilot
+            </span>
+          </Link>
 
-        <div className="hidden sm:flex items-center gap-1 text-sm">
-          <NavLink to="/" className={navLinkClass}>Home</NavLink>
-          <NavLink to="/about" className={navLinkClass}><Info className="inline-block mr-1 size-4" />About</NavLink>
-          <NavLink to="/create-user" className={navLinkClass}><UserPlus className="inline-block mr-1 size-4" />Create User</NavLink>
-          <NavLink to="/dashboard" className={navLinkClass}><Shirt className="inline-block mr-1 size-4" />Wardrobe</NavLink>
-          <NavLink to="/upload" className={navLinkClass}><Upload className="inline-block mr-1 size-4" />Upload</NavLink>
-          <NavLink to="/generate" className={navLinkClass}> Generate </NavLink>
+          <div className="hidden md:flex items-center gap-1 text-xs">
+            <NavLink to="/" className={navLinkClass} end>
+              Home
+            </NavLink>
+            <NavLink to="/about" className={navLinkClass}>
+              <span className="inline-flex items-center gap-1">
+                <Info size={12} /> About
+              </span>
+            </NavLink>
+            <NavLink to="/create-user" className={navLinkClass}>
+              <span className="inline-flex items-center gap-1">
+                <UserPlus size={12} /> Create User
+              </span>
+            </NavLink>
+            <NavLink to="/dashboard" className={navLinkClass}>
+              <span className="inline-flex items-center gap-1">
+                <Shirt size={12} /> Wardrobe
+              </span>
+            </NavLink>
+            <NavLink to="/upload" className={navLinkClass}>
+              <span className="inline-flex items-center gap-1">
+                <Upload size={12} /> Upload
+              </span>
+            </NavLink>
+            <NavLink to="/generate" className={navLinkClass}>
+              Generate
+            </NavLink>
+          </div>
         </div>
 
-        {/* Right side: either user badge or Get Started button */}
-        {user && user.name ? (
-          <div className="hidden sm:flex items-center gap-3">
-            <div className="px-3 py-1 rounded-lg bg-panel/40 border border-border text-sm flex items-center gap-3">
-              <span className="font-medium">{user.name}</span>
-              <button onClick={handleSwitchUser} className="text-xs text-blue-600 underline">Switch User</button>
-              <button onClick={handleLogout} className="text-xs text-muted underline">Log out</button>
-            </div>
-          </div>
-        ) : (
-          <Link to="/create-user" className="btn btn-accent breathe hidden sm:inline-flex">
-            Get Started
-          </Link>
-        )}
+        {/* right: user controls */}
+        <div className="flex items-center gap-3 text-xs">
+          {user ? (
+            <>
+              {/* edit current user */}
+              <Link
+                to="/profile"
+                className="hidden sm:inline-flex items-center rounded-xl bg-panel/70 border border-border px-3 py-1.5 text-xs"
+              >
+                {user.name || "Profile"}
+              </Link>
 
-        {/* User selection modal */}
+              <button
+                type="button"
+                className="text-[11px] underline-offset-2 hover:underline"
+                onClick={openUserSelect}
+              >
+                Switch user
+              </button>
+
+              <button
+                type="button"
+                className="text-[11px] text-text-muted hover:underline underline-offset-2"
+                onClick={handleLogout}
+              >
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              {/* this is the important fix: switch user is still available when logged out */}
+              <button
+                type="button"
+                className="text-[11px] underline-offset-2 hover:underline"
+                onClick={openUserSelect}
+              >
+                Switch user
+              </button>
+
+              <Link
+                to="/create-user"
+                className="btn btn-accent breathe text-xs"
+              >
+                Get started
+              </Link>
+            </>
+          )}
+        </div>
+
+        {/* user select overlay */}
         {showSelect && (
-          <div className="fixed inset-0 bg-black/30 z-50 flex justify-center" style={{ alignItems: 'flex-start' }}>
-            <div className="bg-white rounded-lg shadow-lg p-6 min-w-[320px] max-w-[90vw] mt-[20vh]">
-              <h3 className="text-lg font-semibold mb-2">Select user to work on</h3>
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+            <div className="card bg-panel max-w-sm w-full mx-4 p-5 space-y-3">
+              <h2 className="text-sm font-semibold">Select a wardrobe</h2>
+              <p className="text-[11px] text-text-muted">
+                Pick an existing user to continue with their wardrobe. You can
+                always create a new one later.
+              </p>
+
               {loadingUsers ? (
-                <div>Loading users...</div>
+                <div className="text-xs text-text-muted">Loading users…</div>
+              ) : users.length === 0 ? (
+                <div className="text-xs text-text-muted">
+                  No saved users yet. Create your first profile to get started.
+                </div>
               ) : (
-                <ul className="space-y-2 mb-4">
+                <ul className="space-y-1 max-h-52 overflow-y-auto text-sm">
                   {users.map((u) => (
-                    <li key={u.id} className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{u.name}</span>
+                    <li key={u.id}>
                       <button
-                        className="btn btn-sm btn-accent"
+                        type="button"
                         onClick={() => handleSelectUser(u)}
-                      >Select</button>
+                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-panel/70 border border-transparent hover:border-border transition"
+                      >
+                        <div className="font-medium text-xs">{u.name}</div>
+                        <div className="text-[11px] text-text-muted">
+                          {u.city || "No city set"}
+                        </div>
+                      </button>
                     </li>
                   ))}
                 </ul>
               )}
-              <button className="btn btn-muted w-full" onClick={() => setShowSelect(false)}>
-                Cancel
-              </button>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  className="btn btn-muted text-xs"
+                  onClick={() => setShowSelect(false)}
+                >
+                  Close
+                </button>
+                {!user && (
+                  <Link
+                    to="/create-user"
+                    className="btn btn-accent text-xs"
+                    onClick={() => setShowSelect(false)}
+                  >
+                    New profile
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -100,4 +200,3 @@ export default function Navbar({ user, setUser }) {
     </header>
   );
 }
-
