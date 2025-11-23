@@ -18,20 +18,32 @@ export async function listUsers() {
   return data;
 }
 
+export async function updateUser(userId, payload) {
+  const { data } = await API.put(`/users/${userId}`, payload);
+  return data;
+}
+
 // USER-SCOPED ITEMS
 export async function listUserItems(userId) {
   const { data } = await API.get(`/users/${userId}/items`);
   return data;
 }
-export async function uploadUserItem(userId, { file, name }) {
+export async function uploadUserItem(userId, { file, name, allowDuplicate = false }) {
   const form = new FormData();
   if (file) form.append("file", file);
   if (name) form.append("name", name);
-  const { data } = await API.post(`/users/${userId}/items`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+
+  const { data } = await API.post(
+    `/users/${userId}/items?allow_duplicate=${allowDuplicate ? "true" : "false"}`,
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
   return data;
 }
+
+
 
 // ITEM OPS
 export async function classifyItem(itemId) {

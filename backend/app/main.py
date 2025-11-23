@@ -1,5 +1,6 @@
 import random
 import requests
+import hashlib
 from datetime import date, datetime
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate
 from . import crud
 from .config import settings
 from .vision import classify_image
+from fastapi import Query
 
 app = FastAPI(title="Outfit Maker API", version="0.3.1")
 
@@ -68,6 +70,24 @@ def create_user(payload: UserCreate, session: Session = Depends(get_session)):
         return user
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+
+@app.put("/users/{user_id}", response_model=UserRead)
+def update_user(user_id: int, payload: UserCreate, session: Session = Depends(get_session)):
+    """Allow editing a user's name / city (and optional style preferences)."""
+    user = crud.get_user(session, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updated = crud.update_user(
+        session,
+        user,
+        name=payload.name,
+        city=payload.city,
+        style_preferences=payload.style_preferences,
+    )
+    return updated
+
 
 
 # ---- Items ----
@@ -75,8 +95,10 @@ def create_user(payload: UserCreate, session: Session = Depends(get_session)):
 async def upload_item(
     user_id: int,
     file: UploadFile = File(...),
+    allow_duplicate: bool = Query(False),
     session: Session = Depends(get_session),
 ):
+
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
@@ -87,7 +109,22 @@ async def upload_item(
         raise HTTPException(status_code=400, detail="Only JPG, PNG, or WEBP images are allowed")
 
     content = await file.read()
-    item = crud.create_item_with_file(session, user_id, file.filename, content)
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    existing = crud.find_item_by_hash(session, user_id, content_hash)
+    if existing and not allow_duplicate:
+        # send a 409 with structured detail so the frontend can show a confirm
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason": "duplicate_item",
+                "message": "Item with the same image already exists in this wardrobe.",
+                "existing_item_id": existing.id,
+            },
+        )
+
+    item = crud.create_item_with_file(session, user_id, file.filename, content, content_hash)
+
 
     print(
         "auto_classify_on_upload =",
@@ -515,9 +552,16 @@ def suggest_outfit(
             "season": it.season,
             "image_url": it.image_url,
         }
-    #print("SUGGESTED OUTFIT:", outfit)
+    # print("SUGGESTED OUTFIT:", outfit)
 
-    return {k: _pack(v) for k, v in outfit.items()}
+    packed_outfit = {k: _pack(v) for k, v in outfit.items()}
+
+    # Return both weather context and the suggested outfit
+    return {
+        "weather": weather,       # dict from get_weather(...)
+        "outfit": packed_outfit,  # { "top": {...}, "bottom": {...}, ... }
+    }
+
 
 
 
