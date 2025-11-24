@@ -467,7 +467,7 @@ export default function GenerateOutfit() {
 
             {/* Outfit Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-              {["top", "bottom", "outer", "shoes"].map((part) => {
+              {["outer", "top", "bottom", "shoes"].map((part) => {
                 // Backwards-compat: if backend still returns plain {top,bottom,...},
                 // fall back to suggestion itself.
                 const outfit = suggestion.outfit || suggestion;
@@ -480,7 +480,7 @@ export default function GenerateOutfit() {
                   <div
                     key={part}
                     className="relative group"
-                    style={{ animation: `bounceIn 0.6s ease-out ${part === "top" ? "0s" : part === "bottom" ? "0.1s" : part === "outer" ? "0.2s" : "0.3s"}` }}
+                    style={{ animation: `bounceIn 0.6s ease-out ${part === "outer" ? "0s" : part === "top" ? "0.1s" : part === "bottom" ? "0.2s" : "0.3s"}` }}
                   >
                     <div className="card p-4 hover:shadow-xl transition-shadow">
                       <div className="text-sm font-medium text-text-muted mb-3 capitalize flex items-center gap-2">

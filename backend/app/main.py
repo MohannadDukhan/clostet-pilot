@@ -336,33 +336,434 @@ def _color_key(c: Optional[str]) -> str:
     return (c or "").lower().strip()
 
 
-def _compatible(top, bottom) -> bool:
+# Color name to approximate hex mapping
+COLOR_HEX_MAP = {
+    "black": "#000000",
+    "white": "#ffffff",
+    "gray": "#808080",
+    "grey": "#808080",
+    "navy": "#000080",
+    "blue": "#0000ff",
+    "light blue": "#87ceeb",
+    "dark blue": "#00008b",
+    "red": "#ff0000",
+    "dark red": "#8b0000",
+    "burgundy": "#800020",
+    "green": "#008000",
+    "dark green": "#006400",
+    "olive": "#808000",
+    "yellow": "#ffff00",
+    "orange": "#ffa500",
+    "brown": "#a52a2a",
+    "beige": "#f5f5dc",
+    "tan": "#d2b48c",
+    "cream": "#fffdd0",
+    "pink": "#ffc0cb",
+    "purple": "#800080",
+    "lavender": "#e6e6fa",
+    "maroon": "#800000",
+    "teal": "#008080",
+    "khaki": "#f0e68c",
+    "ivory": "#fffff0",
+    "gold": "#ffd700",
+    "silver": "#c0c0c0",
+    "multicolor": "#808080",  # treat as neutral
+}
+
+
+def hex_to_hsl(hex_color: str):
+    """Convert #rrggbb to (h, s, l). h in [0,360), s,l in [0,1]."""
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+
+    c_max = max(r, g, b)
+    c_min = min(r, g, b)
+    delta = c_max - c_min
+
+    l = (c_max + c_min) / 2.0
+
+    if delta == 0:
+        return 0.0, 0.0, l
+
+    s = delta / (1 - abs(2 * l - 1))
+
+    if c_max == r:
+        h = 60 * (((g - b) / delta) % 6)
+    elif c_max == g:
+        h = 60 * (((b - r) / delta) + 2)
+    else:
+        h = 60 * (((r - g) / delta) + 4)
+
+    return h, s, l
+
+
+def hue_distance(h1: float, h2: float) -> float:
+    """Smallest distance between two hues on color wheel."""
+    d = abs(h1 - h2)
+    return min(d, 360 - d)
+
+
+def is_neutral_fallback(h: float, s: float, l: float) -> bool:
+    """Fallback HSL-based neutral check."""
+    # very low saturation (grey/white/black)
+    if s < 0.18:
+        return True
+    # navy-like dark blue
+    if 200 <= h <= 260 and l < 0.35 and s < 0.6:
+        return True
+    # fallback warm earth tones
+    if 10 <= h <= 70 and s < 0.65 and 0.2 <= l <= 0.9:
+        return True
+    return False
+
+
+def score_outfit_colors(color_names: list[str]) -> float:
+    """
+    Score color harmony for outfit pieces.
+    
+    Args:
+        color_names: List of 2-4 color names (e.g., ["black", "white", "navy"])
+    
+    Returns:
+        Score from 0-10 (higher = better color harmony)
+    """
+    # Filter out None values
+    colors = [c for c in color_names if c]
+    if len(colors) < 2:
+        return 5.0  # neutral score if not enough colors
+    
+    # Convert color names to hex
+    hex_colors = []
+    for color_name in colors:
+        key = _color_key(color_name)
+        hex_val = COLOR_HEX_MAP.get(key, "#808080")  # default to gray
+        hex_colors.append(hex_val)
+    
+    # Convert to HSL
+    hsl_colors = [hex_to_hsl(c) for c in hex_colors]
+    
+    neutrals = 0
+    brights = 0
+    has_light = False
+    has_dark = False
+    hues = []
+    
+    # Track specific neutral types for bonuses
+    has_navy = False
+    has_white = False
+    earth_tones = 0  # beige, tan, brown, khaki
+    
+    for i, (h, s, l) in enumerate(hsl_colors):
+        color_name = _color_key(colors[i])
+        
+        # 1️⃣ NAME-BASED neutrals first (fixes beige/tan/navy/brown)
+        if color_name in (
+            "black","white","grey","gray","navy","brown",
+            "beige","tan","khaki","cream","ivory",
+            "olive","silver","multicolor"
+        ):
+            neutrals += 1
+        # fallback HSL neutral
+        elif is_neutral_fallback(h, s, l):
+            neutrals += 1
+        
+        # 2️⃣ BRIGHTS — EXCLUDE earth tones + navy from bright counting
+        if (
+            s > 0.65 and 0.25 < l < 0.8
+            and color_name not in ("khaki","beige","tan","brown","olive","navy")
+        ):
+            brights += 1
+        
+        if l > 0.7:
+            has_light = True
+        if l < 0.3:
+            has_dark = True
+        hues.append(h)
+        
+        # Track specific colors for bonuses
+        if color_name == "navy":
+            has_navy = True
+        if color_name in ("white", "cream", "ivory"):
+            has_white = True
+        if color_name in ("beige", "tan", "brown", "khaki", "olive"):
+            earth_tones += 1
+    
+    score = 0.0
+    n = len(colors)
+    
+    # 1) Neutrals: reward outfits with neutral anchors
+    if n <= 3:
+        if neutrals >= 2:
+            score += 3
+        elif neutrals == 1:
+            score += 2
+    else:  # 4 pieces
+        if neutrals >= 3:
+            score += 4  # Bonus for 3+ neutrals in 4-piece outfit
+        elif neutrals == 2:
+            score += 3
+        elif neutrals == 1:
+            score += 1
+    
+    # 2) Bright colors: penalize too many loud colors
+    if brights <= 1:
+        score += 3
+    elif brights == 2:
+        score += 1
+    # else +0 (too many brights)
+    
+    # 3) Light/dark contrast: reward depth
+    if has_light and has_dark:
+        score += 2
+    
+    # 4) Hue harmony on color wheel
+    complementary = False
+    analogous = False
+    for i in range(len(hues)):
+        for j in range(i + 1, len(hues)):
+            d = hue_distance(hues[i], hues[j])
+            if d <= 30:          # analogous (similar colors)
+                analogous = True
+            if 150 <= d <= 210:  # complementary (opposite colors)
+                complementary = True
+    
+    if analogous:
+        score += 1
+    if complementary:
+        score += 1
+    
+    # 5) Bonus for all-neutral earth tone outfits (beige, tan, brown, khaki)
+    if earth_tones >= 2 and neutrals >= 2:
+        score += 1.5  # Warm earth tones bonus
+    
+    # 6) Bonus for classic business formal (navy + white + dark neutrals)
+    if has_navy and has_white and neutrals >= 2:
+        score += 1  # Business formal bonus
+    
+    return round(min(score, 10.0), 1)
+
+
+def _get_color_score(top_color, bottom_color, outer_color=None, shoes_color=None) -> float:
+    """
+    Get color harmony score for outfit pieces.
+    
+    Args:
+        top_color: Color of the top (required)
+        bottom_color: Color of the bottom (required)
+        outer_color: Color of outer layer (optional)
+        shoes_color: Color of shoes (optional)
+    
+    Returns:
+        Score from 0-10 (higher = better color harmony)
+    """
+    colors = [top_color, bottom_color, outer_color, shoes_color]
+    return score_outfit_colors(colors)
+
+
+def _compatible(top, bottom, outer=None, shoes=None) -> bool:
+    """
+    Check if outfit pieces are minimally compatible (formality rules only).
+    Color scoring is handled separately in _score_outfit.
+    """
     if not top or not bottom:
         return True
 
-    # 1) style / formality compatibility
-    # avoid very casual tops (hoodies, graphic tees, etc) with very formal bottoms
+    # Only check formality compatibility
+    # Color scoring happens in _score_outfit, so we don't double-score
     try:
         t_form = getattr(top, "formality", None)
         b_form = getattr(bottom, "formality", None)
         if t_form == "casual" and b_form in ("semi_formal", "formal"):
             return False
     except Exception:
-        # if anything is missing, just fall back to color logic
         pass
+    
+    return True  # If formality is OK, let scoring determine quality
 
-    # 2) color compatibility
-    t = _color_key(getattr(top, "primary_color", None))
-    b = _color_key(getattr(bottom, "primary_color", None))
-    neutrals = {"black", "white", "gray", "grey", "navy", "beige", "tan", "cream"}
 
-    if t == "multicolor" or b == "multicolor":
-        return True
-    if t == b and t not in neutrals:
-        # strongly avoid bright top + same bright bottom (e.g. red + red)
+def _score_outfit(top, bottom, outer, shoes, season, formality) -> float:
+    """
+    Score an outfit based on how well pieces work together.
+    Higher score = better outfit.
+    
+    Factors:
+    - Season match: 0-30 points
+    - Formality match: 0-40 points
+    - Color harmony: 0-30 points (scaled from 0-10 color score)
+    """
+    score = 0.0
+    
+    # Season scoring (0-30 points)
+    for item in [top, bottom, outer, shoes]:
+        if not item:
+            continue
+        item_season = getattr(item, "season", None)
+        if item_season == season:
+            score += 10  # Perfect match
+        elif item_season == "all_season":
+            score += 7   # All-season is versatile
+        elif item_season and "_" in item_season:
+            s1, s2 = item_season.split("_")
+            if season in (s1, s2):
+                score += 8  # Combo season match
+    
+    # Formality scoring (0-40 points)
+    if formality:
+        for item in [top, bottom, outer, shoes]:
+            if not item:
+                continue
+            item_form = getattr(item, "formality", None)
+            if not item_form:
+                continue
+            
+            desired_rank = _formality_rank(formality)
+            item_rank = _formality_rank(item_form)
+            diff = abs(desired_rank - item_rank)
+            
+            if diff == 0:
+                score += 10  # Perfect match
+            elif diff == 1:
+                score += 5   # Close match
+            # diff >= 2: no points
+    
+    # Color harmony scoring (0-30 points)
+    # Get colors from all pieces
+    top_color = getattr(top, "primary_color", None) if top else None
+    bottom_color = getattr(bottom, "primary_color", None) if bottom else None
+    outer_color = getattr(outer, "primary_color", None) if outer else None
+    shoes_color = getattr(shoes, "primary_color", None) if shoes else None
+    
+    # Score colors (returns 0-10, we scale to 0-30)
+    color_score = score_outfit_colors([top_color, bottom_color, outer_color, shoes_color])
+    score += color_score * 3  # Scale 0-10 to 0-30
+    
+    return score
+
+
+
+def _pick_outfit_legacy(
+    tops, bottoms, outers, shoes,
+    anchor_top, anchor_bottom, anchor_outer, anchor_shoes,
+    season, formality
+):
+    """
+    LEGACY outfit picking logic.
+    This is the old algorithm kept as a fallback/placeholder.
+    """
+    def _want_outer() -> bool:
+        """
+        Determine if outer layer should be included in outfit:
+        - Formal/Semi-formal: ALWAYS need outer (blazer/suit jacket) regardless of season
+        - Fall/Winter casual: Need outer for warmth
+        - Spring/Summer casual: No outer (too warm)
+        """
+        # Formal events ALWAYS need a jacket/blazer, even in summer
+        if formality in ("semi_formal", "formal"):
+            return True
+        # For casual/smart-casual, only add outer in cold seasons
+        if season in ("winter", "fall"):
+            return True
         return False
 
-    return True
+    # start with anchors if present
+    t = anchor_top
+    b = anchor_bottom
+    o = anchor_outer
+    s = anchor_shoes
+
+    best_outfit = None
+    best_score = -1
+
+    # case 1: anchored top + bottom -> find best compatible outer + shoes
+    if t and b:
+        for o_cand in (outers if _want_outer() else [None]):
+            for s_cand in (shoes or [None]):
+                if _compatible(t, b, o_cand, s_cand):
+                    score = _score_outfit(t, b, o_cand, s_cand, season, formality)
+                    if score > best_score:
+                        best_score = score
+                        best_outfit = {"top": t, "bottom": b, "outer": o_cand, "shoes": s_cand}
+        
+        # fallback if no compatible outfit found
+        if not best_outfit:
+            o = outers[0] if outers and _want_outer() else None
+            s = shoes[0] if shoes else None
+            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
+        return best_outfit
+
+    # case 2: anchored top only -> find best compatible bottom + outer + shoes
+    if t and not b:
+        for b_cand in bottoms:
+            for o_cand in (outers if _want_outer() else [None]):
+                for s_cand in (shoes or [None]):
+                    if _compatible(t, b_cand, o_cand, s_cand):
+                        score = _score_outfit(t, b_cand, o_cand, s_cand, season, formality)
+                        if score > best_score:
+                            best_score = score
+                            best_outfit = {"top": t, "bottom": b_cand, "outer": o_cand, "shoes": s_cand}
+        
+        # fallback
+        if not best_outfit:
+            b = bottoms[0] if bottoms else None
+            o = outers[0] if outers and _want_outer() else None
+            s = shoes[0] if shoes else None
+            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
+        return best_outfit
+
+    # case 3: anchored bottom only -> find best compatible top + outer + shoes
+    if b and not t:
+        for t_cand in tops:
+            for o_cand in (outers if _want_outer() else [None]):
+                for s_cand in (shoes or [None]):
+                    if _compatible(t_cand, b, o_cand, s_cand):
+                        score = _score_outfit(t_cand, b, o_cand, s_cand, season, formality)
+                        if score > best_score:
+                            best_score = score
+                            best_outfit = {"top": t_cand, "bottom": b, "outer": o_cand, "shoes": s_cand}
+        
+        # fallback
+        if not best_outfit:
+            t = tops[0] if tops else None
+            o = outers[0] if outers and _want_outer() else None
+            s = shoes[0] if shoes else None
+            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
+        return best_outfit
+
+    # case 4: no anchors -> find best compatible top + bottom + outer + shoes
+    if tops and bottoms:
+        for t_cand in tops:
+            for b_cand in bottoms:
+                for o_cand in (outers if _want_outer() else [None]):
+                    for s_cand in (shoes or [None]):
+                        if _compatible(t_cand, b_cand, o_cand, s_cand):
+                            score = _score_outfit(t_cand, b_cand, o_cand, s_cand, season, formality)
+                            if score > best_score:
+                                best_score = score
+                                best_outfit = {"top": t_cand, "bottom": b_cand, "outer": o_cand, "shoes": s_cand}
+        
+        # fallback: use first of each
+        if not best_outfit:
+            t = tops[0]
+            b = bottoms[0]
+            o = outers[0] if outers and _want_outer() else None
+            s = shoes[0] if shoes else None
+            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
+        return best_outfit
+
+    # case 5: extreme fallback — no proper top/bottom pools,
+    # but we may still have anchors or singles
+    if not t and tops:
+        t = tops[0]
+    if not b and bottoms:
+        b = bottoms[0]
+    if not o and outers and _want_outer():
+        o = outers[0]
+    if not s and shoes:
+        s = shoes[0]
+
+    return {"top": t, "bottom": b, "outer": o, "shoes": s}
 
 
 
@@ -445,6 +846,20 @@ def suggest_outfit(
     outers = _pool("outerwear")
     shoes = _pool("shoes")
 
+    # Debug logging
+    print(f"🔍 Filtered pools for formality='{formality}', season='{season}':")
+    print(f"   Tops: {len(tops)} items")
+    print(f"   Bottoms: {len(bottoms)} items")
+    print(f"   Outers: {len(outers)} items")
+    print(f"   Shoes: {len(shoes)} items")
+    
+    # Log what got filtered out
+    for item in all_items:
+        if item.outfit_part == "top" and item not in tops and item.id not in anchor_set and item.id not in exclude_set:
+            print(f"   ❌ Top filtered: {item.category} (season={item.season}, formality={item.formality})")
+        if item.outfit_part == "bottom" and item not in bottoms and item.id not in anchor_set and item.id not in exclude_set:
+            print(f"   ❌ Bottom filtered: {item.category} (season={item.season}, formality={item.formality})")
+
     # add a bit of randomness so repeated "Generate" clicks can explore
     # different valid combinations instead of always picking the same first match
     random.shuffle(tops)
@@ -452,93 +867,17 @@ def suggest_outfit(
     random.shuffle(outers)
     random.shuffle(shoes)
 
-
-    def _want_outer() -> bool:
-        return season in ("winter", "fall") or formality in ("semi_formal", "formal")
-
-    def _pick_first():
-        # start with anchors if present
-        t = anchor_top
-        b = anchor_bottom
-        o = anchor_outer
-        s = anchor_shoes
-
-        # case 1: anchored top + bottom already chosen, just optionally fill outer + shoes
-        if t and b:
-            if not o and outers and _want_outer():
-                o = outers[0]
-            if not s and shoes:
-                s = shoes[0]
-            return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-        # case 2: anchored top only -> find a compatible bottom
-        if t and not b:
-            if bottoms:
-                # try to respect color compatibility first
-                chosen = None
-                for cand in bottoms:
-                    if _compatible(t, cand):
-                        chosen = cand
-                        break
-                b = chosen or bottoms[0]
-            if not o and outers and _want_outer():
-                o = outers[0]
-            if not s and shoes:
-                s = shoes[0]
-            return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-        # case 3: anchored bottom only -> find a compatible top
-        if b and not t:
-            if tops:
-                chosen = None
-                for cand in tops:
-                    if _compatible(cand, b):
-                        chosen = cand
-                        break
-                t = chosen or tops[0]
-            if not o and outers and _want_outer():
-                o = outers[0]
-            if not s and shoes:
-                s = shoes[0]
-            return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-        # case 4: no anchored top/bottom -> fall back to old behavior
-        if tops and bottoms:
-            for t_candidate in tops:
-                for b_candidate in bottoms:
-                    if not _compatible(t_candidate, b_candidate):
-                        continue
-                    t = t_candidate
-                    b = b_candidate
-                    if not o and outers and _want_outer():
-                        o = outers[0]
-                    if not s and shoes:
-                        s = shoes[0]
-                    return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-            # no color-compatible combo, but we still have tops + bottoms
-            t = tops[0]
-            b = bottoms[0]
-            if not o and outers and _want_outer():
-                o = outers[0]
-            if not s and shoes:
-                s = shoes[0]
-            return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-        # case 5: extreme fallback — no proper top/bottom pools,
-        # but we may still have anchors or singles
-        if not t and tops:
-            t = tops[0]
-        if not b and bottoms:
-            b = bottoms[0]
-        if not o and outers and _want_outer():
-            o = outers[0]
-        if not s and shoes:
-            s = shoes[0]
-
-        return {"top": t, "bottom": b, "outer": o, "shoes": s}
-
-    outfit = _pick_first()
+    # ============================================================
+    # NEW OUTFIT SELECTION LOGIC (TODO: implement new algorithm)
+    # ============================================================
+    # TODO: Implement new outfit selection logic here
+    # For now, using legacy algorithm as placeholder
+    
+    outfit = _pick_outfit_legacy(
+        tops, bottoms, outers, shoes,
+        anchor_top, anchor_bottom, anchor_outer, anchor_shoes,
+        season, formality
+    )
 
     def _pack(it):
         if not it:
