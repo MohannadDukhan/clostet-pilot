@@ -40,6 +40,8 @@ class ItemCreate(BaseModel):
     outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
+    primary_color_hex: Optional[str] = None
+    primary_color_hsv: Optional[str] = None
     secondary_color: Optional[str] = None
     formality: Optional[Formality] = None
     season: Optional[Season] = None
@@ -56,6 +58,8 @@ class ItemRead(BaseModel):
     outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
+    primary_color_hex: Optional[str] = None
+    primary_color_hsv: Optional[str] = None
     secondary_color: Optional[str] = None
     formality: Optional[Formality] = None
     season: Optional[Season] = None
@@ -71,6 +75,8 @@ class ItemUpdate(BaseModel):
     outfit_part: Optional[OutfitPart] = None
     category: Optional[str] = None
     primary_color: Optional[str] = None
+    primary_color_hex: Optional[str] = None
+    primary_color_hsv: Optional[str] = None
     secondary_color: Optional[str] = None
     formality: Optional[Formality] = None
     season: Optional[Season] = None

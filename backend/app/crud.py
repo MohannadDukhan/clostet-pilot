@@ -148,6 +148,14 @@ def update_item_classification(session: Session, item_id: int, data: dict) -> It
     # color → primary_color
     if data.get("color"):
         item.primary_color = data["color"]
+    
+    # color_hex → primary_color_hex
+    if data.get("color_hex"):
+        item.primary_color_hex = data["color_hex"]
+    
+    # color_hsv → primary_color_hsv
+    if data.get("color_hsv"):
+        item.primary_color_hsv = data["color_hsv"]
 
     # normalize season/formality to snake_case used in models
     if data.get("season"):

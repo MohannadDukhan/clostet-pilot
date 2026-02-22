@@ -15,3 +15,10 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# ML Model files (generated)
+backend/*.pkl
+backend/color_model.pkl
+backend/training_data.csv
+backend/training_archives/
+backend/training_backups/

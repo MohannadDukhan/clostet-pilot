@@ -16,6 +16,8 @@ class Prediction(TypedDict):
     outfit_part: str
     category: str
     color: str
+    color_hex: str  # RGB hex value like "#1a2b3c"
+    color_hsv: str  # HSV values as "hue,saturation,value" (e.g., "240,50,80")
     season: str
     formality: str
 
@@ -57,6 +59,30 @@ def _postprocess(p: dict) -> Prediction:
         ],
         "multicolor",
     )
+    
+    # Extract hex color value (RGB as hex string)
+    color_hex = p.get("color_hex", "#808080")  # default to gray
+    # Validate hex format
+    if not (isinstance(color_hex, str) and color_hex.startswith("#") and len(color_hex) == 7):
+        color_hex = "#808080"  # fallback to gray if invalid
+    
+    # Extract HSV values
+    color_hsv = p.get("color_hsv", "0,0,50")  # default to gray
+    # Validate HSV format (should be "hue,saturation,value")
+    if isinstance(color_hsv, str) and "," in color_hsv:
+        try:
+            parts = color_hsv.split(",")
+            if len(parts) == 3:
+                h, s, v = float(parts[0]), float(parts[1]), float(parts[2])
+                # Validate ranges: H: 0-360, S: 0-100, V: 0-100
+                if not (0 <= h <= 360 and 0 <= s <= 100 and 0 <= v <= 100):
+                    color_hsv = "0,0,50"
+            else:
+                color_hsv = "0,0,50"
+        except (ValueError, IndexError):
+            color_hsv = "0,0,50"
+    else:
+        color_hsv = "0,0,50"
 
     # NEW season logic
     raw_season = p.get("season", "all_season")
@@ -123,6 +149,8 @@ def _postprocess(p: dict) -> Prediction:
         "category": cat,
         "outfit_part": outfit_part,
         "color": col,
+        "color_hex": color_hex,
+        "color_hsv": color_hsv,
         "season": season,
         "formality": formality,
     }
@@ -152,11 +180,14 @@ def classify_with_openai(image_path: str) -> Prediction:
         "You are an AI wardrobe assistant analyzing a single clothing photo. "
         "Focus on the main clothing item, ignoring background (bed, floor, other objects). "
         "If the background is cluttered, estimate best you can. "
-        "Return STRICT JSON with the keys: category, outfit_part, color, season, formality.\n"
+        "Return STRICT JSON with the keys: category, outfit_part, color, color_hex, color_hsv, season, formality.\n"
         "Allowed values:\n"
         f"- category: {', '.join([e.value for e in Category])}\n"
         f"- outfit_part: {', '.join([e.value for e in OutfitPart])}, other\n"
         "- color: black, white, gray, navy, blue, green, red, yellow, orange, brown, beige, cream, purple, pink, multicolor\n"
+        "- color_hex: RGB color in hex format (e.g., #1a2b3c). Analyze the actual color of the item and provide the closest hex value.\n"
+        "- color_hsv: HSV color values as 'hue,saturation,value' (e.g., '240,50,80'). "
+        "Hue: 0-360 degrees, Saturation: 0-100%, Value: 0-100%. Analyze the dominant color of the clothing item.\n"
         f"- season: {', '.join([e.value for e in Season])}\n"
         f"- formality: {', '.join([e.value for e in Formality])}\n"
         "SEASON RULES:\n"
@@ -177,6 +208,8 @@ def classify_with_openai(image_path: str) -> Prediction:
         "\"outfit_part\":\"top\","
         "\"category\":\"sweater\","
         "\"color\":\"navy\","
+        "\"color_hex\":\"#001f3f\","
+        "\"color_hsv\":\"210,100,25\","
         "\"season\":\"fall_winter\","
         "\"formality\":\"smart_casual\""
         "}"
