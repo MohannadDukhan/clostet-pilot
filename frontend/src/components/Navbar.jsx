@@ -88,6 +88,11 @@ export default function Navbar({ user, setUser }) {
             <NavLink to="/generate" className={navLinkClass}>
               Generate
             </NavLink>
+            <NavLink to="/style-lab" className={navLinkClass}>
+              <span className="inline-flex items-center gap-1">
+                🧪 Style Lab
+              </span>
+            </NavLink>
           </div>
         </div>
 

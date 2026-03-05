@@ -10,6 +10,7 @@ import Upload from "./pages/Upload";
 import NotFound from "./pages/NotFound";
 import GenerateOutfit from "./pages/GenerateOutfit";
 import EditProfile from "./pages/EditProfile";
+import StyleLab from "./pages/StyleLab";
 
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="upload" element={<Upload />} />
           <Route path="profile" element={<EditProfile />} />   {/* new */}
           <Route path="generate" element={<GenerateOutfit />} />
+          <Route path="style-lab" element={<StyleLab />} />
           <Route path="*" element={<NotFound />} />
         </Route>
 

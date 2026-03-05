@@ -64,6 +64,11 @@ export async function suggestOutfit(userId, params = {}) {
   return data;
 }
 
+export async function scoreOutfit(userId, payload) {
+  const { data } = await API.post(`/users/${userId}/outfits/score`, payload);
+  return data;
+}
+
 
 
 // Build a usable <img src> from whatever the backend returns.
