@@ -17,6 +17,7 @@ from .vision import classify_image
 from .aimodel import score_outfit_ml
 from .models import OutfitHistory
 from .services.gap_recommendations import compute_gap_recommendations
+from .aimodel import score_outfit_ml, extract_features, hue_distance, trained_model
 from fastapi import Query
 
 app = FastAPI(title="Outfit Maker API", version="0.3.1")
@@ -609,109 +610,102 @@ def _compatible(top, bottom, outer=None, shoes=None) -> bool:
     return True  # If formality is OK, let scoring determine quality
 
 
-def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = False) -> float:
+def _season_penalty(item, season: Optional[str]) -> float:
     """
-    Score an outfit based on how well pieces work together.
-    Higher score = better outfit.
-    
-    Args:
-        verbose: If True, show detailed ML model output
-    
-    Factors:
-    - Season match: 0-30 points
-    - Formality match: 0-40 points
-    - Color harmony: 0-30 points (scaled from 0-10 color score)
+    Return a penalty (0.0 – 1.0) for how far the item's season is from the
+    desired season.  0 = perfect match, 1.0 = completely wrong season.
     """
-    score = 0.0
-    
-    # Season scoring (0-30 points)
-    for item in [top, bottom, outer, shoes]:
-        if not item:
-            continue
-        item_season = getattr(item, "season", None)
-        if item_season == season:
-            score += 10  # Perfect match
-        elif item_season == "all_season":
-            score += 7   # All-season is versatile
-        elif item_season and "_" in item_season:
-            s1, s2 = item_season.split("_")
-            if season in (s1, s2):
-                score += 8  # Combo season match
-    
-    # Formality scoring (0-40 points) and track mismatches for color penalty
-    formality_mismatch_count = 0
-    if formality:
-        for item in [top, bottom, outer, shoes]:
-            if not item:
-                continue
-            item_form = getattr(item, "formality", None)
-            if not item_form:
-                continue
-            
-            desired_rank = _formality_rank(formality)
-            item_rank = _formality_rank(item_form)
-            diff = abs(desired_rank - item_rank)
-            
-            if diff == 0:
-                score += 10  # Perfect match
-            elif diff == 1:
-                score += 5   # Close match (one level off)
-                formality_mismatch_count += 1  # Track mismatch for color penalty
-            # diff >= 2: no points, but count as mismatch
-            elif diff >= 2:
-                formality_mismatch_count += 1
-    
-    # Color harmony scoring (0-30 points)
-    # Get colors from all pieces
-    top_color = getattr(top, "primary_color", None) if top else None
-    bottom_color = getattr(bottom, "primary_color", None) if bottom else None
-    outer_color = getattr(outer, "primary_color", None) if outer else None
-    shoes_color = getattr(shoes, "primary_color", None) if shoes else None
-    top_hsv = getattr(top, "primary_color_hsv", None) if top else None
+    if not season or season in ("any", "all_season"):
+        return 0.0
+    item_season = getattr(item, "season", None)
+    if item_season is None or item_season == "all_season":
+        return 0.0          # untagged / all-season → no penalty
+    if item_season == season:
+        return 0.0          # exact match
+
+    # combo seasons like "fall_winter" — partial match
+    if "_" in item_season:
+        parts = item_season.split("_")
+        if season in parts:
+            return 0.0      # season is one of the parts → exact
+        return 0.5          # season not in combo → mild penalty
+
+    # adjacent seasons get a smaller penalty than opposite ones
+    ORDER = ["spring", "summer", "fall", "winter"]
+    try:
+        idx_item = ORDER.index(item_season)
+        idx_want = ORDER.index(season)
+    except ValueError:
+        return 0.5          # unknown value → mild penalty
+    dist = min(abs(idx_item - idx_want), 4 - abs(idx_item - idx_want))
+    # dist 1 → 0.5,  dist 2 → 1.0
+    return dist * 0.5
+
+
+def _formality_penalty(item, formality: Optional[str]) -> float:
+    """
+    Return a penalty (0.0 – 1.0) for how far the item's formality is from
+    the desired level.  0 = perfect match.
+    """
+    if not formality or formality == "any":
+        return 0.0
+    item_form = getattr(item, "formality", None)
+    if item_form is None:
+        return 0.0          # untagged → no penalty
+    r_item = _formality_rank(item_form)
+    r_want = _formality_rank(formality)
+    dist = abs(r_item - r_want)
+    # dist 0 → 0, dist 1 → 0.5, dist 2 → 1.0, dist 3 → 1.5
+    return dist * 0.5
+
+
+def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = True) -> float:
+    """
+    Score an outfit using the ML color model, then subtract penalties for
+    items that don't match the user-chosen season / formality.
+
+    Returns:
+        Final score (can go below 0). Higher = better.
+    """
+    top_color  = getattr(top,    "primary_color",     None) if top    else None
+    bottom_color = getattr(bottom, "primary_color",   None) if bottom else None
+    outer_color  = getattr(outer,  "primary_color",   None) if outer  else None
+    shoes_color  = getattr(shoes,  "primary_color",   None) if shoes  else None
+
+    top_hsv    = getattr(top,    "primary_color_hsv", None) if top    else None
     bottom_hsv = getattr(bottom, "primary_color_hsv", None) if bottom else None
-    outer_hsv = getattr(outer, "primary_color_hsv", None) if outer else None
-    shoes_hsv = getattr(shoes, "primary_color_hsv", None) if shoes else None
-    
-    # Check if we have HSV data for all required pieces (top, bottom, shoes)
-    # If any critical piece is missing HSV, fall back to rule-based scoring
-    has_all_hsv = (
-        top_hsv is not None and 
-        bottom_hsv is not None and 
-        (shoes_hsv is not None if shoes else True)  # shoes optional
-    )
-    useModel = True  # Enable ML model scoring
-    
-    # Debug: print HSV availability only if verbose
-    if verbose:
-        print(f"🔍 HSV Check: top={top_hsv}, bottom={bottom_hsv}, outer={outer_hsv}, shoes={shoes_hsv}")
-        print(f"🔍 has_all_hsv={has_all_hsv}, useModel={useModel}")
-    
-    if has_all_hsv and useModel:
-        # Use ML-based scoring with HSV data
-        if verbose:
-            print("✅ Using ML model for scoring")
+    outer_hsv  = getattr(outer,  "primary_color_hsv", None) if outer  else None
+    shoes_hsv  = getattr(shoes,  "primary_color_hsv", None) if shoes  else None
+
+    # ML model only needs top + bottom HSV at minimum
+    can_use_model = (top_hsv is not None and bottom_hsv is not None)
+
+    if can_use_model:
         color_score = score_outfit_ml(
             colors=[top_color, bottom_color, outer_color, shoes_color],
             hsvs=[top_hsv, bottom_hsv, outer_hsv, shoes_hsv],
-            verbose=verbose
+            verbose=verbose,
         )
     else:
-        # Fall back to rule-based scoring (no HSV data available)
         if verbose:
-            print(f"⚠️  Using rule-based scoring (has_all_hsv={has_all_hsv})")
+            print(f"⚠️  Missing HSV (top={top_hsv}, bottom={bottom_hsv}) → rule-based fallback")
         color_score = score_outfit_colors([top_color, bottom_color, outer_color, shoes_color])
-    
-    # Apply formality mismatch penalty to color score
-    # For each mismatched item, reduce color score by 1.0 (out of 10)
-    if formality_mismatch_count > 0:
-        original_color_score = color_score
-        color_score = max(0.0, color_score - formality_mismatch_count)
-        if verbose:
-            print(f"⚠️  Formality mismatch penalty: {formality_mismatch_count} items off → Color score: {original_color_score:.1f} - {formality_mismatch_count} = {color_score:.1f}")
-    
-    score += color_score * 3  # Scale 0-10 to 0-30
-    
-    return score
+
+    # ── Season & formality penalties ──────────────────────────
+    penalty = 0.0
+    for piece in (top, bottom, outer, shoes):
+        if piece is None:
+            continue
+        penalty += _season_penalty(piece, season)
+        penalty += _formality_penalty(piece, formality)
+
+    final = color_score - penalty
+
+    if verbose and penalty > 0:
+        print(f"   🔻 Season/formality penalty: −{penalty:.1f}  "
+              f"(color {color_score:.1f} → final {final:.1f})")
+
+    return final
 
 
 
@@ -722,219 +716,132 @@ def _pick_outfit_legacy(
 ):
     """
     LEGACY outfit picking logic.
-    This is the old algorithm kept as a fallback/placeholder.
+    Returns the best outfit dict {top, bottom, outer, shoes}.
     """
+    import itertools, time
+
     def _want_outer() -> bool:
-        """
-        Determine if outer layer should be included in outfit:
-        - Formal/Semi-formal: ALWAYS need outer (blazer/suit jacket) regardless of season
-        - Fall/Winter casual: Need outer for warmth
-        - Spring/Summer casual: No outer (too warm)
-        """
-        # Formal events ALWAYS need a jacket/blazer, even in summer
         if formality in ("semi_formal", "formal"):
             return True
-        # For casual/smart-casual, only add outer in cold seasons
         if season in ("winter", "fall"):
             return True
         return False
 
-    # start with anchors if present
     t = anchor_top
     b = anchor_bottom
     o = anchor_outer
     s = anchor_shoes
 
-    best_outfit = None
-    best_score = -1
-    evaluated_count = 0
+    outer_pool = outers if _want_outer() else [None]
+    shoe_pool  = shoes or [None]
 
-    # case 1: anchored top + bottom -> find best compatible outer + shoes
-    if t and b:
-        print(f"🎯 Case 1: Anchored top+bottom, finding outer+shoes")
-        top_outfits = []  # Store all outfits with scores
-        
-        for o_cand in (outers if _want_outer() else [None]):
-            for s_cand in (shoes or [None]):
-                if _compatible(t, b, o_cand, s_cand):
-                    score = _score_outfit(t, b, o_cand, s_cand, season, formality, verbose=False)
-                    evaluated_count += 1
-                    
-                    outfit_desc = f"Top: {t.category if t else 'None'}, Bottom: {b.category if b else 'None'}, " \
-                                  f"Outer: {o_cand.category if o_cand else 'None'}, Shoes: {s_cand.category if s_cand else 'None'}"
-                    
-                    top_outfits.append({
-                        "outfit": {"top": t, "bottom": b, "outer": o_cand, "shoes": s_cand},
-                        "score": score,
-                        "desc": outfit_desc
-                    })
-        
-        # Sort by score and get top 3
-        top_outfits.sort(key=lambda x: x["score"], reverse=True)
-        top_3 = top_outfits[:3]
-        
-        # Print top 3 with detailed ML output
-        print(f"\n🏆 Top 3 Outfits (out of {evaluated_count} evaluated):\n")
-        for i, item in enumerate(top_3, 1):
-            print(f"#{i} - {item['desc']} → Score: {item['score']:.1f}")
-            # Re-score with verbose=True to show ML details
-            outfit = item["outfit"]
-            _score_outfit(outfit["top"], outfit["bottom"], outfit["outer"], outfit["shoes"], 
-                         season, formality, verbose=True)
-        
-        # Select best outfit
-        if top_outfits:
-            best_outfit = top_3[0]["outfit"]
-            best_score = top_3[0]["score"]
+    # ── Build candidate lists per slot (anchor overrides pool) ──
+    t_list = [t] if t else tops
+    b_list = [b] if b else bottoms
+    o_list = [o] if o else outer_pool
+    s_list = [s] if s else shoe_pool
+
+    if not t_list or not b_list:
+        # extreme fallback
+        return {"top": t or (tops[0] if tops else None),
+                "bottom": b or (bottoms[0] if bottoms else None),
+                "outer": o or (outers[0] if outers and _want_outer() else None),
+                "shoes": s or (shoes[0] if shoes else None)}
+
+    # ── Score all combos (with a cap to stay fast) ──
+    MAX_COMBOS = 200
+    combos = list(itertools.product(t_list, b_list, o_list, s_list))
+    if len(combos) > MAX_COMBOS:
+        random.shuffle(combos)
+        combos = combos[:MAX_COMBOS]
+
+    start = time.perf_counter()
+
+    # ── Pre-extract features + build batch for ONE model.predict() call ──
+    compatible_combos = []
+    feature_rows = []
+    fallback_indices = []  # indices that need rule-based scoring
+
+    for tc, bc, oc, sc in combos:
+        if not _compatible(tc, bc, oc, sc):
+            continue
+
+        top_hsv    = getattr(tc, "primary_color_hsv", None) if tc else None
+        bottom_hsv = getattr(bc, "primary_color_hsv", None) if bc else None
+        outer_hsv  = getattr(oc, "primary_color_hsv", None) if oc else None
+        shoes_hsv  = getattr(sc, "primary_color_hsv", None) if sc else None
+
+        hsvs = [top_hsv, bottom_hsv, outer_hsv, shoes_hsv]
+        compatible_combos.append((tc, bc, oc, sc, hsvs))
+
+        if top_hsv is not None and bottom_hsv is not None:
+            feature_rows.append(extract_features(hsvs))
         else:
-            print(f"   ⚠️ No compatible outfit found, using fallback")
-            o = outers[0] if outers and _want_outer() else None
-            s = shoes[0] if shoes else None
-            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
-        
-        return best_outfit
+            feature_rows.append(None)
+            fallback_indices.append(len(compatible_combos) - 1)
 
-    # case 2: anchored top only -> find best compatible bottom + outer + shoes
-    if t and not b:
-        print(f"🎯 Case 2: Anchored top, finding bottom+outer+shoes")
-        top_outfits = []
-        
-        for b_cand in bottoms:
-            for o_cand in (outers if _want_outer() else [None]):
-                for s_cand in (shoes or [None]):
-                    if _compatible(t, b_cand, o_cand, s_cand):
-                        score = _score_outfit(t, b_cand, o_cand, s_cand, season, formality, verbose=False)
-                        evaluated_count += 1
-                        
-                        outfit_desc = f"Top: {t.category if t else 'None'}, Bottom: {b_cand.category if b_cand else 'None'}, " \
-                                      f"Outer: {o_cand.category if o_cand else 'None'}, Shoes: {s_cand.category if s_cand else 'None'}"
-                        
-                        top_outfits.append({
-                            "outfit": {"top": t, "bottom": b_cand, "outer": o_cand, "shoes": s_cand},
-                            "score": score,
-                            "desc": outfit_desc
-                        })
-        
-        # Sort and get top 3
-        top_outfits.sort(key=lambda x: x["score"], reverse=True)
-        top_3 = top_outfits[:3]
-        
-        print(f"\n🏆 Top 3 Outfits (out of {evaluated_count} evaluated):\n")
-        for i, item in enumerate(top_3, 1):
-            print(f"#{i} - {item['desc']} → Score: {item['score']:.1f}")
-            outfit = item["outfit"]
-            _score_outfit(outfit["top"], outfit["bottom"], outfit["outer"], outfit["shoes"], 
-                         season, formality, verbose=True)
-        
-        if top_outfits:
-            best_outfit = top_3[0]["outfit"]
+    # Batch ML prediction — single call for all combos
+    ml_indices = [i for i, f in enumerate(feature_rows) if f is not None]
+    ml_scores = {}
+    if ml_indices and trained_model is not None:
+        import warnings, numpy as np
+        X = np.array([feature_rows[i] for i in ml_indices])
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="X does not have valid feature names")
+            preds = trained_model.predict(X)
+        for idx, raw_score in zip(ml_indices, preds):
+            ml_scores[idx] = round(max(0.0, min(float(raw_score), 10.0)), 1)
+
+    # Assemble scored list
+    scored = []
+    for i, (tc, bc, oc, sc, hsvs) in enumerate(compatible_combos):
+        if i in ml_scores:
+            color_score = ml_scores[i]
         else:
-            print(f"   ⚠️ No compatible outfit found, using fallback")
-            b = bottoms[0] if bottoms else None
-            o = outers[0] if outers and _want_outer() else None
-            s = shoes[0] if shoes else None
-            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
-        
-        return best_outfit
+            # rule-based fallback
+            cs = [getattr(tc, "primary_color", None) if tc else None,
+                  getattr(bc, "primary_color", None) if bc else None,
+                  getattr(oc, "primary_color", None) if oc else None,
+                  getattr(sc, "primary_color", None) if sc else None]
+            color_score = score_outfit_colors(cs)
 
-    # case 3: anchored bottom only -> find best compatible top + outer + shoes
-    if b and not t:
-        print(f"🎯 Case 3: Anchored bottom, finding top+outer+shoes")
-        top_outfits = []
-        
-        for t_cand in tops:
-            for o_cand in (outers if _want_outer() else [None]):
-                for s_cand in (shoes or [None]):
-                    if _compatible(t_cand, b, o_cand, s_cand):
-                        score = _score_outfit(t_cand, b, o_cand, s_cand, season, formality, verbose=False)
-                        evaluated_count += 1
-                        
-                        outfit_desc = f"Top: {t_cand.category if t_cand else 'None'}, Bottom: {b.category if b else 'None'}, " \
-                                      f"Outer: {o_cand.category if o_cand else 'None'}, Shoes: {s_cand.category if s_cand else 'None'}"
-                        
-                        top_outfits.append({
-                            "outfit": {"top": t_cand, "bottom": b, "outer": o_cand, "shoes": s_cand},
-                            "score": score,
-                            "desc": outfit_desc
-                        })
-        
-        top_outfits.sort(key=lambda x: x["score"], reverse=True)
-        top_3 = top_outfits[:3]
-        
-        print(f"\n🏆 Top 3 Outfits (out of {evaluated_count} evaluated):\n")
-        for i, item in enumerate(top_3, 1):
-            print(f"#{i} - {item['desc']} → Score: {item['score']:.1f}")
-            outfit = item["outfit"]
-            _score_outfit(outfit["top"], outfit["bottom"], outfit["outer"], outfit["shoes"], 
-                         season, formality, verbose=True)
-        
-        if top_outfits:
-            best_outfit = top_3[0]["outfit"]
-        else:
-            print(f"   ⚠️ No compatible outfit found, using fallback")
-            t = tops[0] if tops else None
-            o = outers[0] if outers and _want_outer() else None
-            s = shoes[0] if shoes else None
-            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
-        
-        return best_outfit
+        # Apply season/formality penalties
+        penalty = 0.0
+        for piece in (tc, bc, oc, sc):
+            if piece is None:
+                continue
+            penalty += _season_penalty(piece, season)
+            penalty += _formality_penalty(piece, formality)
 
-    # case 4: no anchors -> find best compatible top + bottom + outer + shoes
-    if tops and bottoms:
-        print(f"🎯 Case 4: No anchors, finding full outfit")
-        top_outfits = []
-        
-        for t_cand in tops:
-            for b_cand in bottoms:
-                for o_cand in (outers if _want_outer() else [None]):
-                    for s_cand in (shoes or [None]):
-                        if _compatible(t_cand, b_cand, o_cand, s_cand):
-                            score = _score_outfit(t_cand, b_cand, o_cand, s_cand, season, formality, verbose=False)
-                            evaluated_count += 1
-                            
-                            outfit_desc = f"Top: {t_cand.category if t_cand else 'None'}, Bottom: {b_cand.category if b_cand else 'None'}, " \
-                                          f"Outer: {o_cand.category if o_cand else 'None'}, Shoes: {s_cand.category if s_cand else 'None'}"
-                            
-                            top_outfits.append({
-                                "outfit": {"top": t_cand, "bottom": b_cand, "outer": o_cand, "shoes": s_cand},
-                                "score": score,
-                                "desc": outfit_desc
-                            })
-        
-        top_outfits.sort(key=lambda x: x["score"], reverse=True)
-        top_3 = top_outfits[:3]
-        
-        print(f"\n🏆 Top 3 Outfits (out of {evaluated_count} evaluated):\n")
-        for i, item in enumerate(top_3, 1):
-            print(f"#{i} - {item['desc']} → Score: {item['score']:.1f}")
-            outfit = item["outfit"]
-            _score_outfit(outfit["top"], outfit["bottom"], outfit["outer"], outfit["shoes"], 
-                         season, formality, verbose=True)
-        
-        if top_outfits:
-            best_outfit = top_3[0]["outfit"]
-        else:
-            print(f"   ⚠️ No compatible outfit found, using fallback")
-            t = tops[0]
-            b = bottoms[0]
-            o = outers[0] if outers and _want_outer() else None
-            s = shoes[0] if shoes else None
-            best_outfit = {"top": t, "bottom": b, "outer": o, "shoes": s}
-        
-        return best_outfit
+        scored.append({
+            "outfit": {"top": tc, "bottom": bc, "outer": oc, "shoes": sc},
+            "score": color_score - penalty,
+        })
 
-    # case 5: extreme fallback — no proper top/bottom pools,
-    # but we may still have anchors or singles
-    if not t and tops:
-        t = tops[0]
-    if not b and bottoms:
-        b = bottoms[0]
-    if not o and outers and _want_outer():
-        o = outers[0]
-    if not s and shoes:
-        s = shoes[0]
+    elapsed = time.perf_counter() - start
+    scored.sort(key=lambda x: x["score"], reverse=True)
 
-    return {"top": t, "bottom": b, "outer": o, "shoes": s}
+    print(f"⚡ Evaluated {len(scored)} compatible combos in {elapsed:.2f}s")
+    print(f"\n🏆 Top 3 Outfits:\n")
+    for i, item in enumerate(scored[:3], 1):
+        o_part = item["outfit"]
+        print(f"  #{i}  score={item['score']:.1f}  "
+              f"T={o_part['top'].category if o_part['top'] else '-'}  "
+              f"B={o_part['bottom'].category if o_part['bottom'] else '-'}  "
+              f"O={o_part['outer'].category if o_part['outer'] else '-'}  "
+              f"S={o_part['shoes'].category if o_part['shoes'] else '-'}")
+        # Re-score with verbose=True to show ML prediction details
+        _score_outfit(o_part['top'], o_part['bottom'], o_part['outer'], o_part['shoes'],
+                      season, formality, verbose=True)
+
+    if scored:
+        return scored[:3]
+
+    # fallback
+    return [{"outfit": {"top": t or (tops[0] if tops else None),
+            "bottom": b or (bottoms[0] if bottoms else None),
+            "outer": o or (outers[0] if outers and _want_outer() else None),
+            "shoes": s or (shoes[0] if shoes else None)}, "score": 0.0}]
 
 
 
@@ -1098,7 +1005,7 @@ def suggest_outfit(
     # TODO: Implement new outfit selection logic here
     # For now, using legacy algorithm as placeholder
     
-    outfit = _pick_outfit_legacy(
+    ranked = _pick_outfit_legacy(
         tops, bottoms, outers, shoes,
         anchor_top, anchor_bottom, anchor_outer, anchor_shoes,
         season, formality
@@ -1116,9 +1023,9 @@ def suggest_outfit(
             "season": it.season,
             "image_url": it.image_url,
         }
-    # print("SUGGESTED OUTFIT:", outfit)
 
     packed_outfit = {k: _pack(v) for k, v in outfit.items()}
+
     _save_outfit_history(
         session=session,
         user_id=user_id,
@@ -1128,10 +1035,23 @@ def suggest_outfit(
         requested_formality=formality,
         outfit=outfit,
     )
-    # Return both weather context and the suggested outfit
+
+    outfits = []
+    for i, entry in enumerate(ranked, 1):
+        ranked_outfit = entry["outfit"]
+        outfits.append({
+            "rank": i,
+            "score": round(entry["score"], 1),
+            "outfit": {k: _pack(v) for k, v in ranked_outfit.items()},
+        })
+
+    gap_recommendations = compute_gap_recommendations(session, user_id, limit=6)
+
     return {
-        "weather": weather,       # dict from get_weather(...)
-        "outfit": packed_outfit,  # { "top": {...}, "bottom": {...}, ... }
+        "weather": weather,
+        "outfit": packed_outfit,
+        "outfits": outfits,
+        "gapRecommendations": gap_recommendations,
     }
 
 
@@ -1153,4 +1073,273 @@ def debug_env():
     return {
         "auto_classify_on_upload": settings.auto_classify_on_upload,
         "has_openai_key": bool(settings.openai_api_key),
+    }
+
+
+# ---- Style Lab: score an arbitrary outfit ----
+from pydantic import BaseModel as PydanticBaseModel
+
+class ScoreRequest(PydanticBaseModel):
+    top_id: Optional[int] = None
+    bottom_id: Optional[int] = None
+    outer_id: Optional[int] = None
+    shoes_id: Optional[int] = None
+
+
+@app.post("/users/{user_id}/outfits/score")
+def score_outfit_endpoint(
+    user_id: int,
+    payload: ScoreRequest,
+    session: Session = Depends(get_session),
+):
+    """
+    Score an arbitrary combination of wardrobe items using the ML color model.
+    Returns the score, extracted features, and human-readable explanations
+    of what's helping or hurting the outfit.
+    """
+    user = crud.get_user(session, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # Fetch items
+    def _get(item_id):
+        if not item_id:
+            return None
+        it = crud.get_item(session, item_id)
+        if it and it.user_id != user_id:
+            raise HTTPException(403, f"Item {item_id} doesn't belong to this user")
+        return it
+
+    top = _get(payload.top_id)
+    bottom = _get(payload.bottom_id)
+    outer = _get(payload.outer_id)
+    shoes = _get(payload.shoes_id)
+
+    if not top and not bottom:
+        raise HTTPException(400, "Pick at least a top or bottom")
+
+    # Gather color info
+    colors = [
+        getattr(top,    "primary_color",     None) if top    else None,
+        getattr(bottom, "primary_color",     None) if bottom else None,
+        getattr(outer,  "primary_color",     None) if outer  else None,
+        getattr(shoes,  "primary_color",     None) if shoes  else None,
+    ]
+    hsvs = [
+        getattr(top,    "primary_color_hsv", None) if top    else None,
+        getattr(bottom, "primary_color_hsv", None) if bottom else None,
+        getattr(outer,  "primary_color_hsv", None) if outer  else None,
+        getattr(shoes,  "primary_color_hsv", None) if shoes  else None,
+    ]
+
+    top_hsv    = hsvs[0]
+    bottom_hsv = hsvs[1]
+    can_use_model = (top_hsv is not None and bottom_hsv is not None)
+
+    if can_use_model:
+        score = score_outfit_ml(colors=colors, hsvs=hsvs, verbose=True)
+    else:
+        score = score_outfit_colors(colors)
+
+    features = extract_features(hsvs)
+    feat_names = [
+        "avg_hue_distance", "max_hue_distance", "avg_saturation",
+        "high_sat_count", "neutral_count", "has_contrast",
+    ]
+    feat_dict = dict(zip(feat_names, features))
+
+    # ── Build human-readable explanations ──────────────────────
+    explanations = []
+
+    SLOT_NAMES = ["top", "bottom", "outerwear", "shoes"]
+    pieces = [top, bottom, outer, shoes]
+
+    # ── 1. Formality mismatch ──────────────────────────────────
+    formalities = {}
+    for i, piece in enumerate(pieces):
+        if piece:
+            f = getattr(piece, "formality", None)
+            if f:
+                formalities[SLOT_NAMES[i]] = f
+
+    if len(set(formalities.values())) > 1:
+        ranks = {slot: _formality_rank(f) for slot, f in formalities.items()}
+        hi_slot = max(ranks, key=ranks.get)
+        lo_slot = min(ranks, key=ranks.get)
+        gap = ranks[hi_slot] - ranks[lo_slot]
+        if gap >= 2:
+            explanations.append({
+                "type": "style",
+                "icon": "👔",
+                "message": f"Style mismatch — your {lo_slot} is {formalities[lo_slot]} but {hi_slot} is {formalities[hi_slot]}. They don't belong in the same outfit.",
+            })
+        elif gap == 1:
+            explanations.append({
+                "type": "style",
+                "icon": "👔",
+                "message": f"Slight style gap — {lo_slot} is {formalities[lo_slot]}, {hi_slot} is {formalities[hi_slot]}. It can work but it's a stretch.",
+            })
+
+    # ── 2. Season mismatch ─────────────────────────────────────
+    seasons = {}
+    for i, piece in enumerate(pieces):
+        if piece:
+            s = getattr(piece, "season", None)
+            if s and s != "all_season":
+                seasons[SLOT_NAMES[i]] = s
+
+    unique_seasons = set(seasons.values())
+    if len(unique_seasons) > 1:
+        # check if any two are opposite (summer+winter, spring+fall)
+        OPPOSITES = {("summer", "winter"), ("winter", "summer"), ("spring", "fall"), ("fall", "spring")}
+        season_list = list(seasons.items())
+        for a in range(len(season_list)):
+            for b in range(a + 1, len(season_list)):
+                s_a, s_b = season_list[a], season_list[b]
+                if (s_a[1], s_b[1]) in OPPOSITES:
+                    explanations.append({
+                        "type": "style",
+                        "icon": "🌡️",
+                        "message": f"Season clash — {s_a[0]} is {s_a[1]} but {s_b[0]} is {s_b[1]}.",
+                    })
+                    break
+            else:
+                continue
+            break
+
+    # ── 3. Color clash (worst pair) ────────────────────────────
+    parsed = []
+    for hsv_str in hsvs:
+        if hsv_str:
+            try:
+                parts = hsv_str.split(",")
+                parsed.append((float(parts[0]), float(parts[1]), float(parts[2])))
+            except Exception:
+                parsed.append(None)
+        else:
+            parsed.append(None)
+
+    # Count how many bright (non-neutral) pieces exist
+    bright_pieces = sum(1 for p in parsed if p and p[1] >= 20)
+    neutral_c = int(feat_dict["neutral_count"])
+
+    worst_dist = 0
+    worst_pair = None
+    for i in range(4):
+        for j in range(i + 1, 4):
+            if parsed[i] and parsed[j]:
+                # only measure between two non-neutral pieces
+                if parsed[i][1] >= 20 and parsed[j][1] >= 20:
+                    d = hue_distance(parsed[i][0], parsed[j][0])
+                    if d > worst_dist:
+                        worst_dist = d
+                        worst_pair = (i, j)
+
+    if worst_pair:
+        ci, cj = worst_pair
+        c1 = colors[ci] or SLOT_NAMES[ci]
+        c2 = colors[cj] or SLOT_NAMES[cj]
+
+        # With neutrals grounding the outfit, only flag truly opposite colors
+        # Without neutrals, lower the threshold — nothing to balance them
+        if neutral_c >= 1 and worst_dist > 150:
+            # Even with neutrals, straight-up opposite colors still clash
+            explanations.append({
+                "type": "clash",
+                "icon": "⚠️",
+                "message": f"{c1} and {c2} clash — {worst_dist:.0f}° apart, even your neutrals can't save that combo.",
+            })
+        elif neutral_c == 0 and worst_dist > 100:
+            # No neutrals to anchor = clashing hits harder
+            explanations.append({
+                "type": "clash",
+                "icon": "⚠️",
+                "message": f"{c1} and {c2} are {worst_dist:.0f}° apart with no neutrals to balance them out.",
+            })
+        elif neutral_c == 0 and bright_pieces >= 3 and worst_dist > 60:
+            # 3+ brights with no anchor and moderate distance = messy
+            explanations.append({
+                "type": "clash",
+                "icon": "⚠️",
+                "message": f"Too many colors without a neutral anchor — {c1} and {c2} add to the chaos.",
+            })
+
+    # ── 4. Too many brights ────────────────────────────────────
+    high_sat = int(feat_dict["high_sat_count"])
+    if high_sat >= 3:
+        explanations.append({
+            "type": "loud",
+            "icon": "🔴",
+            "message": f"{high_sat} loud pieces — too many bright colors competing with each other.",
+        })
+    elif high_sat == 2:
+        explanations.append({
+            "type": "loud",
+            "icon": "🟡",
+            "message": "2 bright pieces — on the edge of being too busy.",
+        })
+
+    # ── 5. Too many neutrals (boring) ──────────────────────────
+    neutral_c = int(feat_dict["neutral_count"])
+    total_pieces = sum(1 for p in pieces if p is not None)
+    if neutral_c == total_pieces and total_pieces >= 2:
+        explanations.append({
+            "type": "boring",
+            "icon": "😴",
+            "message": "All neutrals — safe but a bit boring. One accent color would liven it up.",
+        })
+    elif neutral_c >= 3 and total_pieces >= 4:
+        explanations.append({
+            "type": "boring",
+            "icon": "😐",
+            "message": "Mostly neutrals — plays it very safe. A pop of color could help.",
+        })
+
+    # If nothing is wrong, say so
+    if not explanations:
+        explanations.append({
+            "type": "good",
+            "icon": "✅",
+            "message": "Colors, style, and balance all look good.",
+        })
+
+    # --- Overall verdict ---
+    if score >= 8.0:
+        verdict = {"label": "Excellent", "emoji": "🔥", "color": "green"}
+    elif score >= 6.5:
+        verdict = {"label": "Good", "emoji": "👍", "color": "blue"}
+    elif score >= 4.5:
+        verdict = {"label": "Okay", "emoji": "😐", "color": "yellow"}
+    elif score >= 3.0:
+        verdict = {"label": "Poor", "emoji": "👎", "color": "orange"}
+    else:
+        verdict = {"label": "Clashing", "emoji": "💥", "color": "red"}
+
+    def _pack_item(it):
+        if not it:
+            return None
+        return {
+            "id": it.id,
+            "category": it.category,
+            "outfit_part": it.outfit_part,
+            "primary_color": it.primary_color,
+            "primary_color_hex": it.primary_color_hex,
+            "primary_color_hsv": it.primary_color_hsv,
+            "formality": it.formality,
+            "season": it.season,
+            "image_url": it.image_url,
+        }
+
+    return {
+        "score": round(score, 1),
+        "used_ml": can_use_model,
+        "verdict": verdict,
+        "features": feat_dict,
+        "explanations": explanations,
+        "items": {
+            "top": _pack_item(top),
+            "bottom": _pack_item(bottom),
+            "outer": _pack_item(outer),
+            "shoes": _pack_item(shoes),
+        },
     }

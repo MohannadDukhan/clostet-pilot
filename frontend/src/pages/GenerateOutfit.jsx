@@ -47,6 +47,7 @@ export default function GenerateOutfit() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [swappingPart, setSwappingPart] = useState(null);
+  const [outfitIndex, setOutfitIndex] = useState(0);
 
 
   // load users on mount and restore last selection if available
@@ -134,8 +135,9 @@ export default function GenerateOutfit() {
   async function handleSwap(part) {
     if (!suggestion || !userId) return;
 
-    // current outfit from the suggestion
-    const outfit = suggestion.outfit || suggestion;
+    // current outfit from the ranked list
+    const currentEntry = suggestion.outfits?.[outfitIndex];
+    const outfit = currentEntry?.outfit || suggestion.outfit || suggestion;
     const current = outfit[part];
     if (!current) return;
 
@@ -170,6 +172,7 @@ export default function GenerateOutfit() {
     try {
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
+      setOutfitIndex(0);
     } catch (e) {
       console.error("swap failed", e);
       setErr("Could not swap this item. Please try again.");
@@ -203,6 +206,7 @@ export default function GenerateOutfit() {
 
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
+      setOutfitIndex(0);
     } catch (error) {
       setErr("Failed to generate outfit. Make sure you have items uploaded and city is set.");
       console.error(error);
@@ -433,15 +437,30 @@ export default function GenerateOutfit() {
       )}
 
       {/* Beautiful Outfit Display */}
-      {suggestion && (
+      {suggestion && (() => {
+        const totalOutfits = suggestion.outfits?.length || 0;
+        const currentEntry = suggestion.outfits?.[outfitIndex];
+        const outfit = currentEntry?.outfit || suggestion.outfit || suggestion;
+        const score = currentEntry?.score;
+        const rankEmoji = ["🥇", "🥈", "🥉"][outfitIndex] || `#${outfitIndex + 1}`;
+
+        return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-gradient-to-br from-panel to-background border border-border rounded-3xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Your Perfect Outfit
-              </h2>
-              <p className="text-text-muted mt-2">✨ Curated just for you</p>
+              <div className="flex items-center justify-center gap-3 mb-1">
+                <span className="text-2xl">{rankEmoji}</span>
+                <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  Outfit {outfitIndex + 1} of {totalOutfits}
+                </h2>
+              </div>
+              {score != null && (
+                <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30">
+                  <span className="text-sm text-text-muted">ML Score</span>
+                  <span className="text-lg font-bold text-purple-400">{score}/10</span>
+                </div>
+              )}
               {/* Weather summary */}
               {suggestion.weather && (
                 <div className="mt-3 text-sm text-text-muted flex flex-col items-center gap-1">
@@ -468,9 +487,6 @@ export default function GenerateOutfit() {
             {/* Outfit Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
               {["outer", "top", "bottom", "shoes"].map((part) => {
-                // Backwards-compat: if backend still returns plain {top,bottom,...},
-                // fall back to suggestion itself.
-                const outfit = suggestion.outfit || suggestion;
                 const it = outfit[part];
 
                 // Skip outer if it's empty
@@ -540,27 +556,56 @@ export default function GenerateOutfit() {
               })}
             </div>
 
+            {/* Dot indicators */}
+            {totalOutfits > 1 && (
+              <div className="flex justify-center gap-2 mb-6">
+                {suggestion.outfits.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setOutfitIndex(idx)}
+                    className={`w-3 h-3 rounded-full transition-all ${
+                      idx === outfitIndex
+                        ? "bg-purple-500 scale-125"
+                        : "bg-border hover:bg-purple-400/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* Action Buttons */}
-            <div className="flex gap-4 justify-center">
+            <div className="flex gap-4 justify-center flex-wrap">
               <button
                 className="px-8 py-3 rounded-2xl border border-border hover:bg-panel transition"
-                onClick={() => setSuggestion(null)}
+                onClick={() => { setSuggestion(null); setOutfitIndex(0); }}
               >
                 Close
               </button>
+
+              {totalOutfits > 1 && outfitIndex < totalOutfits - 1 && (
+                <button
+                  className="px-8 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold transition"
+                  onClick={() => setOutfitIndex((i) => i + 1)}
+                >
+                  Next Outfit →
+                </button>
+              )}
+
               <button
                 className="px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
                 onClick={() => {
                   setSuggestion(null);
+                  setOutfitIndex(0);
                   openGenerateModal();
                 }}
               >
-                Generate Another
+                Generate New
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
