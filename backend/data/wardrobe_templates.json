@@ -1,0 +1,302 @@
+[
+  {
+    "id": "white_sneakers",
+    "name": "White Sneakers",
+    "outfit_part": "shoes",
+    "categories": ["sneakers", "trainers"],
+    "colors": ["white", "neutral"],
+    "seasons": ["all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A clean neutral sneaker that pairs with most casual and smart-casual outfits."
+  },
+  {
+    "id": "black_sneakers",
+    "name": "Black Sneakers",
+    "outfit_part": "shoes",
+    "categories": ["sneakers", "trainers"],
+    "colors": ["black", "neutral"],
+    "seasons": ["all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A low-maintenance everyday sneaker that works across darker palettes."
+  },
+  {
+    "id": "leather_boots",
+    "name": "Leather Boots",
+    "outfit_part": "shoes",
+    "categories": ["boots", "leather_boots"],
+    "colors": ["black", "brown", "neutral"],
+    "seasons": ["fall", "winter"],
+    "formality": ["smart_casual", "semi_formal"],
+    "description": "Boots add structure and seasonal warmth for cooler days."
+  },
+  {
+    "id": "dress_shoes",
+    "name": "Dress Shoes",
+    "outfit_part": "shoes",
+    "categories": ["dress_shoes", "oxfords", "derby"],
+    "colors": ["black", "brown", "neutral"],
+    "seasons": ["all"],
+    "formality": ["semi_formal", "formal", "business_casual"],
+    "description": "A formal shoe option improves coverage for events and office-ready looks."
+  },
+  {
+    "id": "brown_loafers",
+    "name": "Brown Loafers",
+    "outfit_part": "shoes",
+    "categories": ["loafers", "dress_shoes"],
+    "colors": ["brown", "neutral"],
+    "seasons": ["spring", "summer", "fall"],
+    "formality": ["smart_casual", "business_casual"],
+    "description": "Loafers bridge casual and polished outfits without over-dressing."
+  },
+  {
+    "id": "rain_boots",
+    "name": "Rain Boots",
+    "outfit_part": "shoes",
+    "categories": ["boots", "rain_boots"],
+    "colors": ["black", "navy", "neutral"],
+    "seasons": ["fall", "winter", "spring"],
+    "formality": ["casual"],
+    "description": "A weather-focused shoe option for wet days."
+  },
+  {
+    "id": "plain_white_tee",
+    "name": "Plain White Tee",
+    "outfit_part": "top",
+    "categories": ["t_shirt", "tee", "tshirt"],
+    "colors": ["white", "neutral"],
+    "seasons": ["spring", "summer", "all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A base-layer staple that pairs with nearly any bottom or jacket."
+  },
+  {
+    "id": "plain_black_tee",
+    "name": "Plain Black Tee",
+    "outfit_part": "top",
+    "categories": ["t_shirt", "tee", "tshirt"],
+    "colors": ["black", "neutral"],
+    "seasons": ["all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A versatile top that anchors monochrome and layered looks."
+  },
+  {
+    "id": "neutral_hoodie",
+    "name": "Neutral Hoodie",
+    "outfit_part": "top",
+    "categories": ["hoodie", "sweatshirt"],
+    "colors": ["gray", "grey", "black", "navy", "neutral"],
+    "seasons": ["fall", "winter", "spring"],
+    "formality": ["casual"],
+    "description": "An easy casual top for comfort and layering."
+  },
+  {
+    "id": "button_down_white",
+    "name": "White Button-Down",
+    "outfit_part": "top",
+    "categories": ["shirt", "button_down", "dress_shirt"],
+    "colors": ["white", "neutral"],
+    "seasons": ["all"],
+    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
+    "description": "A polished top that expands smart-casual and formal combinations."
+  },
+  {
+    "id": "button_down_blue",
+    "name": "Blue Button-Down",
+    "outfit_part": "top",
+    "categories": ["shirt", "button_down", "dress_shirt"],
+    "colors": ["blue", "light_blue", "navy", "neutral"],
+    "seasons": ["all"],
+    "formality": ["smart_casual", "business_casual", "semi_formal"],
+    "description": "A reliable office-ready top that still works in casual settings."
+  },
+  {
+    "id": "neutral_knit_sweater",
+    "name": "Neutral Knit Sweater",
+    "outfit_part": "top",
+    "categories": ["sweater", "knit"],
+    "colors": ["gray", "grey", "cream", "beige", "navy", "neutral"],
+    "seasons": ["fall", "winter"],
+    "formality": ["smart_casual", "business_casual"],
+    "description": "A refined cold-weather top for clean layered outfits."
+  },
+  {
+    "id": "classic_polo",
+    "name": "Classic Polo",
+    "outfit_part": "top",
+    "categories": ["polo", "shirt"],
+    "colors": ["white", "black", "navy", "neutral"],
+    "seasons": ["spring", "summer", "fall"],
+    "formality": ["smart_casual", "business_casual"],
+    "description": "A structured casual top that upgrades basic combinations."
+  },
+  {
+    "id": "dark_jeans",
+    "name": "Dark Jeans",
+    "outfit_part": "bottom",
+    "categories": ["jeans", "denim"],
+    "colors": ["black", "navy", "blue", "neutral"],
+    "seasons": ["all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A versatile bottom that works across most casual contexts."
+  },
+  {
+    "id": "light_jeans",
+    "name": "Light Jeans",
+    "outfit_part": "bottom",
+    "categories": ["jeans", "denim"],
+    "colors": ["light_blue", "blue"],
+    "seasons": ["spring", "summer", "fall"],
+    "formality": ["casual"],
+    "description": "A lighter denim option adds contrast in warm-weather outfits."
+  },
+  {
+    "id": "chinos_tan",
+    "name": "Tan Chinos",
+    "outfit_part": "bottom",
+    "categories": ["chinos", "pants", "trousers"],
+    "colors": ["tan", "beige", "khaki", "neutral"],
+    "seasons": ["spring", "summer", "fall"],
+    "formality": ["smart_casual", "business_casual"],
+    "description": "A smart-casual bottom that pairs well with shirts and polos."
+  },
+  {
+    "id": "chinos_black",
+    "name": "Black Chinos",
+    "outfit_part": "bottom",
+    "categories": ["chinos", "pants", "trousers"],
+    "colors": ["black", "neutral"],
+    "seasons": ["all"],
+    "formality": ["smart_casual", "business_casual"],
+    "description": "A clean dark bottom for polished everyday outfits."
+  },
+  {
+    "id": "wool_trousers",
+    "name": "Wool Trousers",
+    "outfit_part": "bottom",
+    "categories": ["trousers", "pants"],
+    "colors": ["gray", "grey", "black", "navy", "neutral"],
+    "seasons": ["fall", "winter"],
+    "formality": ["business_casual", "semi_formal", "formal"],
+    "description": "A structured bottom that improves formal and office coverage."
+  },
+  {
+    "id": "tailored_black_pants",
+    "name": "Tailored Black Pants",
+    "outfit_part": "bottom",
+    "categories": ["pants", "trousers", "slacks"],
+    "colors": ["black", "neutral"],
+    "seasons": ["all"],
+    "formality": ["business_casual", "semi_formal", "formal"],
+    "description": "A formal-friendly bottom for cleaner outfit lines."
+  },
+  {
+    "id": "relaxed_neutral_cargo",
+    "name": "Neutral Cargo Pants",
+    "outfit_part": "bottom",
+    "categories": ["cargo", "pants"],
+    "colors": ["olive", "khaki", "beige", "neutral"],
+    "seasons": ["spring", "fall", "winter"],
+    "formality": ["casual"],
+    "description": "A casual utility bottom for more varied day-to-day combinations."
+  },
+  {
+    "id": "denim_jacket",
+    "name": "Denim Jacket",
+    "outfit_part": "outerwear",
+    "categories": ["jacket", "denim_jacket"],
+    "colors": ["blue", "navy", "neutral"],
+    "seasons": ["spring", "fall"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A dependable mid-layer for transitional weather."
+  },
+  {
+    "id": "midweight_jacket",
+    "name": "Midweight Jacket",
+    "outfit_part": "outerwear",
+    "categories": ["jacket", "windbreaker", "bomber_jacket"],
+    "colors": ["black", "navy", "olive", "neutral"],
+    "seasons": ["fall", "spring"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A flexible outer layer for cooler mornings and evenings."
+  },
+  {
+    "id": "wool_coat",
+    "name": "Wool Coat",
+    "outfit_part": "outerwear",
+    "categories": ["coat", "wool_coat"],
+    "colors": ["black", "gray", "grey", "camel", "neutral"],
+    "seasons": ["fall", "winter"],
+    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
+    "description": "A polished cold-weather layer for dressier outfit stacks."
+  },
+  {
+    "id": "rain_jacket",
+    "name": "Rain Jacket",
+    "outfit_part": "outerwear",
+    "categories": ["rain_jacket", "shell_jacket", "jacket"],
+    "colors": ["black", "navy", "olive", "neutral"],
+    "seasons": ["spring", "fall", "winter"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A weather-proof outer layer to handle rainy forecasts."
+  },
+  {
+    "id": "bomber_jacket",
+    "name": "Bomber Jacket",
+    "outfit_part": "outerwear",
+    "categories": ["bomber_jacket", "jacket"],
+    "colors": ["black", "olive", "navy", "neutral"],
+    "seasons": ["fall", "spring"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A structured casual outerwear option that broadens jacket variety."
+  },
+  {
+    "id": "navy_blazer",
+    "name": "Navy Blazer",
+    "outfit_part": "outerwear",
+    "categories": ["blazer", "jacket"],
+    "colors": ["navy", "blue", "neutral"],
+    "seasons": ["all"],
+    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
+    "description": "A key formal layer that elevates tops and trousers quickly."
+  },
+  {
+    "id": "puffer_jacket",
+    "name": "Puffer Jacket",
+    "outfit_part": "outerwear",
+    "categories": ["puffer_jacket", "jacket", "coat"],
+    "colors": ["black", "navy", "olive", "neutral"],
+    "seasons": ["winter", "fall"],
+    "formality": ["casual"],
+    "description": "A high-warmth outer layer for cold-weather consistency."
+  },
+  {
+    "id": "trench_coat",
+    "name": "Trench Coat",
+    "outfit_part": "outerwear",
+    "categories": ["coat", "trench_coat"],
+    "colors": ["beige", "tan", "black", "neutral"],
+    "seasons": ["spring", "fall"],
+    "formality": ["smart_casual", "business_casual", "semi_formal"],
+    "description": "A weather-ready coat that keeps outfits sharp in transition seasons."
+  },
+  {
+    "id": "minimalist_trainers",
+    "name": "Minimal Trainers",
+    "outfit_part": "shoes",
+    "categories": ["sneakers", "trainers"],
+    "colors": ["gray", "grey", "beige", "neutral"],
+    "seasons": ["all"],
+    "formality": ["casual", "smart_casual"],
+    "description": "A subtle sneaker option for neutral-heavy outfit rotations."
+  },
+  {
+    "id": "summer_canvas_sneakers",
+    "name": "Canvas Sneakers",
+    "outfit_part": "shoes",
+    "categories": ["sneakers", "canvas_sneakers"],
+    "colors": ["white", "beige", "neutral"],
+    "seasons": ["spring", "summer"],
+    "formality": ["casual"],
+    "description": "A lighter warm-weather shoe to diversify spring and summer looks."
+  }
+]

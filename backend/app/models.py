@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 from sqlmodel import SQLModel, Field, Relationship
@@ -16,6 +16,7 @@ class User(SQLModel, table=True):
     # relationships
     items: List["Item"] = Relationship(back_populates="user")
     outfits: List["Outfit"] = Relationship(back_populates="user")
+    outfit_history: List["OutfitHistory"] = Relationship(back_populates="user")
 
 
 class Item(SQLModel, table=True):
@@ -72,3 +73,43 @@ class Feedback(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     user: Optional["User"] = Relationship()
+
+
+class OutfitHistory(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    requested_date: Optional[date] = None
+    city: Optional[str] = None
+    weather_temp_c: Optional[float] = None
+    weather_condition: Optional[str] = None
+    inferred_season: Optional[str] = None
+    requested_formality: Optional[str] = None
+
+    top_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    bottom_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    outerwear_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+    shoes_item_id: Optional[int] = Field(default=None, foreign_key="item.id")
+
+    top_category: Optional[str] = None
+    top_color: Optional[str] = None
+    top_season: Optional[str] = None
+    top_formality: Optional[str] = None
+
+    bottom_category: Optional[str] = None
+    bottom_color: Optional[str] = None
+    bottom_season: Optional[str] = None
+    bottom_formality: Optional[str] = None
+
+    outerwear_category: Optional[str] = None
+    outerwear_color: Optional[str] = None
+    outerwear_season: Optional[str] = None
+    outerwear_formality: Optional[str] = None
+
+    shoes_category: Optional[str] = None
+    shoes_color: Optional[str] = None
+    shoes_season: Optional[str] = None
+    shoes_formality: Optional[str] = None
+
+    user: Optional["User"] = Relationship(back_populates="outfit_history")

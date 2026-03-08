@@ -283,68 +283,7 @@ def generate_training_data():
     add(["30,70,60", "0,0,60", "300,80,55", "0,0,0"], 4.6) # Loud pink jacket
     add(["0,100,60", "0,0,90", "60,100,60", "0,0,0"], 3.5) # Bright red + white + bright yellow jacket
     add(["240,90,50", "0,0,40", "30,90,70", "0,0,0"], 4.0) # Blue + dark neutral + bright orange jacket
-    # ===== More Monochrome/Analogous (Higher Scores) =====
-    add(["200,80,40", "195,75,35", "205,85,45", None], 8.7) # closely related blues
-    add(["50,40,60", "55,35,55", "45,45,65", None], 8.2) # Earthy yellows
-    add(["320,60,50", "315,55,45", "325,65,55", None], 8.3) # Deep purples
-    add(["10,10,20", "12,12,22", "8,8,18", None], 8.0) # Very dark monochromatic
-    add(["0,0,10", "0,0,15", "0,0,5", None], 8.1) # Grayscale, very dark
-    # ===== More Complementary/Triadic (Mid to High Scores) =====
-    add(["210,70,50", "30,70,50", "0,0,80", None], 7.9) # Blue + Orange + White
-    add(["120,60,50", "300,60,50", "0,0,40", None], 7.5) # Green + Magenta + Dark Gray
-    add(["0,60,50", "180,60,50", "0,0,70", None], 7.7) # Red + Teal + Light Gray
-    add(["60,60,50", "240,60,50", "0,0,30", None], 7.3) # Yellow + Purple + Very Dark Gray
-    add(["15,70,40", "195,70,40", "0,0,90", None], 7.8) # Orange-red + Blue-green + White
-    # ===== More Neutral Combinations (Mid Scores) =====
-    add(["0,0,20", "0,0,40", "0,0,60", None], 7.0) # Dark to light gray
-    add(["0,0,70", "30,10,30", "0,0,0", None], 7.2) # Light gray + muted brown + black
-    add(["40,20,50", "0,0,85", "0,0,0", None], 7.1) # Muted olive + white + black
-    add(["250,15,30", "0,0,80", "0,0,50", None], 7.4) # Muted blue + white + medium gray
-    # ===== More "Average" Combinations (Mid-Range Scores) =====
-    add(["20,60,50", "200,60,50", None, "0,0,0"], 5.9) # Muted orange-yellow + muted blue
-    add(["100,50,45", "280,50,45", None, "0,0,0"], 5.7) # Yellow-green + Violet
-    add(["330,55,50", "150,55,50", None, "0,0,0"], 5.6) # Magenta-pink + olive green
-    add(["230,45,60", "50,45,60", None, "0,0,0"], 6.0) # Light blue + light yellow
-    # ===== More "Bad" Combinations (Low Scores) =====
-    add(["10,100,70", "130,100,70", "250,100,70", "0,0,0"], 1.5) # Three highly saturated, clashing colors
-    add(["0,100,80", "180,100,80", "90,100,80", "0,0,0"], 1.0) # Bright red + bright teal + bright lime
-    add(["30,100,90", "210,100,90", None, "0,0,0"], 2.0) # Very light, saturated orange + bright blue
-    add(["270,100,60", "45,100,60", None, "0,0,0"], 2.2) # Saturated violet + saturated chartreuse
-    # ===== Combinations with Black and White (Varying Scores) =====
-    add(["0,0,0", "0,0,100", "210,70,40", None], 7.8) # Black + White + Blue
-    add(["0,0,0", "0,0,100", "0,70,50", None], 7.0) # Black + White + Red
-    add(["0,0,0", "0,0,100", "60,70,50", None], 6.5) # Black + White + Yellow
-    add(["0,0,0", "210,70,40", "30,60,50", None], 6.8) # Black + Blue + Orange (bold, but can work)
-    add(["0,0,100", "120,80,50", "300,80,50", None], 5.0) # White + Green + Magenta (can be jarring)
-    # ===== Further Monochrome/Analogous =====
-    add(["220,50,30", "230,45,25", "215,55,35", None], 8.6) # Deep blues
-    add(["160,30,40", "170,25,35", "155,35,45", None], 8.1) # Muted blue-greens
-    add(["20,40,70", "25,35,65", "15,45,75", None], 8.0) # Light earthy tones
-    add(["350,60,50", "345,55,45", "355,65,55", None], 8.4) # Rich reds
-    add(["70,50,60", "65,45,55", "75,55,65", None], 8.2) # Muted yellows
-    add(["290,50,40", "300,45,35", "285,55,45", None], 8.3) # Violet-blues
-    # ===== Further Bold Combinations =====
-    add(["200,80,60", "20,80,60", "0,0,70", None], 7.1) # Blue-Purple + Orange + Light Gray
-    add(["100,70,50", "280,70,50", "0,0,40", None], 7.0) # Lime Green + Purple + Dark Gray
-    add(["30,75,65", "210,75,65", "0,0,85", None], 7.6) # Bright Orange + Bright Blue + White
-    add(["0,70,40", "120,70,40", "240,70,40", None], 6.8) # Red + Green + Blue (triadic, high saturation)
-    add(["45,65,55", "165,65,55", "285,65,55", None], 6.9) # Split Complementary (Green-yellow + Blue-violet + Red-violet)
-    # ===== Further Average/OK Combinations =====
-    add(["0,40,50", "180,40,50", None, "0,0,0"], 5.5) # Muted Red + Muted Teal
-    add(["90,30,40", "270,30,40", None, "0,0,0"], 5.4) # Muted Green-Yellow + Muted Violet
-    add(["30,50,70", "210,40,60", "0,0,80", None], 6.3) # Light Orange + Muted Blue + White
-    add(["50,20,30", "0,0,60", "0,0,30", None], 6.2) # Muted Yellow + Medium Gray + Dark Gray
-    # ===== Further Bad/Clashing Combinations =====
-    add(["70,100,80", "190,100,80", "310,100,80", "0,0,0"], 1.2) # Three super bright, clashing pastels
-    add(["10,100,30", "130,100,30", "250,100,30", "0,0,0"], 1.1) # Three super dark, saturated, clashing colors
-    add(["0,100,90", "120,100,90", None, "0,0,0"], 2.0) # Super light, saturated Red + Green
-    # ===== More Outerwear (Good) =====
-    add(["0,0,95", "240,50,30", "210,40,25", "0,0,0"], 8.0) # Very light neutral + muted blue + darker muted blue jacket
-    add(["30,50,40", "0,0,85", "150,30,35", "0,0,0"], 7.7) # Muted orange + white + olive jacket
-    add(["210,60,30", "0,0,70", "330,40,40", "0,0,0"], 7.5) # Blue + light neutral + muted berry jacket
-    # ===== More Outerwear (Bad) =====
-    add(["20,100,70", "0,0,90", "200,100,70", "0,0,0"], 3.0) # Bright yellow-orange + white + bright blue jacket
-    add(["100,90,50", "0,0,30", "280,90,50", "0,0,0"], 3.2) # Bright lime green + dark neutral + bright purple jacket
+
     
     # Write all examples to CSV (overwrites old file)
     write_training_data()

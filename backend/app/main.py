@@ -15,6 +15,8 @@ from . import crud
 from .config import settings
 from .vision import classify_image
 from .aimodel import score_outfit_ml
+from .models import OutfitHistory
+from .services.gap_recommendations import compute_gap_recommendations
 from fastapi import Query
 
 app = FastAPI(title="Outfit Maker API", version="0.3.1")
@@ -200,6 +202,22 @@ def classify_item(item_id: int, session: Session = Depends(get_session)):
 
 
 # ---- Weather API ----
+def _weather_condition_from_code(code: Optional[int]) -> str:
+    if code is None:
+        return "unknown"
+    if code in {0, 1}:
+        return "clear"
+    if code in {2, 3, 45, 48}:
+        return "cloudy"
+    if code in {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82}:
+        return "rain"
+    if code in {71, 73, 75, 77, 85, 86}:
+        return "snow"
+    if code in {95, 96, 99}:
+        return "storm"
+    return "unknown"
+
+
 def get_weather(city: str, target_date: date) -> dict:
     """
     Get weather forecast using Open-Meteo API.
@@ -228,7 +246,7 @@ def get_weather(city: str, target_date: date) -> dict:
             params={
                 "latitude": lat,
                 "longitude": lon,
-                "daily": "temperature_2m_max,temperature_2m_min",
+                "daily": "temperature_2m_max,temperature_2m_min,weathercode",
                 "start_date": target_date.isoformat(),
                 "end_date": target_date.isoformat(),
                 "timezone": "auto"
@@ -244,6 +262,9 @@ def get_weather(city: str, target_date: date) -> dict:
         idx = daily["time"].index(target_date.isoformat())
         temp_max = daily["temperature_2m_max"][idx]
         temp_min = daily["temperature_2m_min"][idx]
+        weather_codes = daily.get("weathercode") or daily.get("weather_code") or []
+        weather_code = weather_codes[idx] if idx < len(weather_codes) else None
+        weather_condition = _weather_condition_from_code(weather_code)
         
         # Representative temperature (weighted toward cooler for outfit planning)
         temp = temp_min * 0.7 + temp_max * 0.3
@@ -264,6 +285,7 @@ def get_weather(city: str, target_date: date) -> dict:
             "temp_max": temp_max,
             "season": season,
             "city": city,
+            "condition": weather_condition,
         }
     
     except Exception as e:
@@ -286,6 +308,7 @@ def get_weather(city: str, target_date: date) -> dict:
             "temp_max": temp + 5,
             "season": season,
             "city": city,
+            "condition": "unknown",
         }
 
 
@@ -931,6 +954,60 @@ def _parse_id_list(raw: Optional[str]) -> set[int]:
     return out
 
 
+def _enum_or_str(value) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "value"):
+        return str(value.value)
+    return str(value)
+
+
+def _snapshot_fields(item, prefix: str) -> dict:
+    return {
+        f"{prefix}_category": _enum_or_str(getattr(item, "category", None)) if item else None,
+        f"{prefix}_color": _enum_or_str(getattr(item, "primary_color", None)) if item else None,
+        f"{prefix}_season": _enum_or_str(getattr(item, "season", None)) if item else None,
+        f"{prefix}_formality": _enum_or_str(getattr(item, "formality", None)) if item else None,
+    }
+
+
+def _save_outfit_history(
+    session: Session,
+    user_id: int,
+    requested_date: date,
+    city: str,
+    weather: dict,
+    requested_formality: Optional[str],
+    outfit: dict,
+) -> OutfitHistory:
+    top = outfit.get("top")
+    bottom = outfit.get("bottom")
+    outer = outfit.get("outer")
+    shoes = outfit.get("shoes")
+
+    history = OutfitHistory(
+        user_id=user_id,
+        requested_date=requested_date,
+        city=city,
+        weather_temp_c=weather.get("temperature"),
+        weather_condition=weather.get("condition"),
+        inferred_season=weather.get("season"),
+        requested_formality=requested_formality if requested_formality not in (None, "any") else None,
+        top_item_id=getattr(top, "id", None),
+        bottom_item_id=getattr(bottom, "id", None),
+        outerwear_item_id=getattr(outer, "id", None),
+        shoes_item_id=getattr(shoes, "id", None),
+        **_snapshot_fields(top, "top"),
+        **_snapshot_fields(bottom, "bottom"),
+        **_snapshot_fields(outer, "outerwear"),
+        **_snapshot_fields(shoes, "shoes"),
+    )
+    session.add(history)
+    session.commit()
+    session.refresh(history)
+    return history
+
+
 @app.get("/users/{user_id}/outfits/suggest")
 def suggest_outfit(
     user_id: int,
@@ -1042,12 +1119,30 @@ def suggest_outfit(
     # print("SUGGESTED OUTFIT:", outfit)
 
     packed_outfit = {k: _pack(v) for k, v in outfit.items()}
-
+    _save_outfit_history(
+        session=session,
+        user_id=user_id,
+        requested_date=target_date,
+        city=user.city,
+        weather=weather,
+        requested_formality=formality,
+        outfit=outfit,
+    )
     # Return both weather context and the suggested outfit
     return {
         "weather": weather,       # dict from get_weather(...)
         "outfit": packed_outfit,  # { "top": {...}, "bottom": {...}, ... }
     }
+
+
+@app.get("/users/{user_id}/wardrobe/recommendations")
+def get_wardrobe_recommendations(user_id: int, session: Session = Depends(get_session)):
+    user = crud.get_user(session, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    recommendations = compute_gap_recommendations(session=session, user_id=user_id, limit=6)
+    return {"recommendations": recommendations}
 
 
 
