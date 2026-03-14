@@ -75,6 +75,22 @@ class Feedback(SQLModel, table=True):
     user: Optional["User"] = Relationship()
 
 
+class LikedOutfit(SQLModel, table=True):
+    """Tracks colour combinations the user has liked/worn — used to avoid repetition."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+    color_fingerprint: str  # e.g. "black,blue,white"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DislikedOutfit(SQLModel, table=True):
+    """Tracks colour combinations the user has disliked — penalised in future suggestions."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+    color_fingerprint: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class OutfitHistory(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")

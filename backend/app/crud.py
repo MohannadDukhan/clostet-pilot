@@ -157,6 +157,10 @@ def update_item_classification(session: Session, item_id: int, data: dict) -> It
     if data.get("color_hsv"):
         item.primary_color_hsv = data["color_hsv"]
 
+    # secondary_color
+    if "secondary_color" in data:
+        item.secondary_color = data["secondary_color"] or None
+
     # normalize season/formality to snake_case used in models
     if data.get("season"):
         s = data["season"].strip().lower()

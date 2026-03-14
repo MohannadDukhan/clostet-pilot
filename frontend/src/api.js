@@ -72,6 +72,28 @@ export async function scoreOutfit(userId, payload) {
 
 
 // Build a usable <img src> from whatever the backend returns.
+// LIKED COLOUR COMBOS
+export async function likeCombo(userId, colorFingerprint) {
+  const { data } = await API.post(`/users/${userId}/liked-combos`, { color_fingerprint: colorFingerprint });
+  return data;
+}
+export async function unlikeCombo(userId, colorFingerprint) {
+  const { data } = await API.delete(`/users/${userId}/liked-combos`, { data: { color_fingerprint: colorFingerprint } });
+  return data;
+}
+export async function dislikeCombo(userId, colorFingerprint) {
+  const { data } = await API.post(`/users/${userId}/disliked-combos`, { color_fingerprint: colorFingerprint });
+  return data;
+}
+export async function undislikeCombo(userId, colorFingerprint) {
+  const { data } = await API.delete(`/users/${userId}/disliked-combos`, { data: { color_fingerprint: colorFingerprint } });
+  return data;
+}
+export async function listDislikedCombos(userId) {
+  const { data } = await API.get(`/users/${userId}/disliked-combos`);
+  return data;
+}
+
 // Supports full URLs, "/storage/..." paths, or just filenames.
 export function imageSrc(it) {
   const raw =

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API, listUsers, listUserItems, suggestOutfit } from "../api";
+import { API, listUsers, listUserItems, suggestOutfit, likeCombo, unlikeCombo, dislikeCombo, undislikeCombo, listDislikedCombos } from "../api";
 
 // helper to resolve image URLs whether absolute or served from /storage
 function imageSrc(item) {
@@ -44,6 +44,9 @@ export default function GenerateOutfit() {
   const [outfitDate, setOutfitDate] = useState("");
 
   const [suggestion, setSuggestion] = useState(null);
+  const [likedCombos, setLikedCombos] = useState(new Set());
+  const [dislikedCombos, setDislikedCombos] = useState(new Set());
+  const [savedDislikes, setSavedDislikes] = useState([]); // [{id, color_fingerprint}] — for the management panel
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [swappingPart, setSwappingPart] = useState(null);
@@ -79,6 +82,7 @@ export default function GenerateOutfit() {
       setItems([]);
       setAnchorIds([]);
       setExcludeIds([]);
+      setSavedDislikes([]);
       return;
     }
 
@@ -86,11 +90,16 @@ export default function GenerateOutfit() {
       try {
         const data = await listUserItems(userId);
         setItems(data || []);
-        // reset selections on user change
         setAnchorIds([]);
         setExcludeIds([]);
       } catch (e) {
         console.error("failed to load items", e);
+      }
+      try {
+        const dislikes = await listDislikedCombos(userId);
+        setSavedDislikes(dislikes || []);
+      } catch (e) {
+        console.error("failed to load dislikes", e);
       }
     })();
   }, [userId]);
@@ -172,10 +181,25 @@ export default function GenerateOutfit() {
     try {
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
+      const preliked = new Set(
+        (data.outfits || [])
+          .filter(e => e.already_liked)
+          .map(e => e.color_fingerprint)
+          .filter(Boolean)
+      );
+      const predisliked = new Set(
+        (data.outfits || [])
+          .filter(e => e.already_disliked)
+          .map(e => e.color_fingerprint)
+          .filter(Boolean)
+      );
+      setLikedCombos(preliked);
+      setDislikedCombos(predisliked);
       setOutfitIndex(0);
     } catch (e) {
       console.error("swap failed", e);
-      setErr("Could not swap this item. Please try again.");
+      const detail = e?.response?.data?.detail;
+      setErr(detail || "Could not swap this item. Please try again.");
     } finally {
       setSwappingPart(null);
     }
@@ -206,9 +230,24 @@ export default function GenerateOutfit() {
 
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
+      const preliked = new Set(
+        (data.outfits || [])
+          .filter(e => e.already_liked)
+          .map(e => e.color_fingerprint)
+          .filter(Boolean)
+      );
+      const predisliked = new Set(
+        (data.outfits || [])
+          .filter(e => e.already_disliked)
+          .map(e => e.color_fingerprint)
+          .filter(Boolean)
+      );
+      setLikedCombos(preliked);
+      setDislikedCombos(predisliked);
       setOutfitIndex(0);
     } catch (error) {
-      setErr("Failed to generate outfit. Make sure you have items uploaded and city is set.");
+      const detail = error?.response?.data?.detail;
+      setErr(detail || "Failed to generate outfit. Make sure you have items uploaded and city is set.");
       console.error(error);
     } finally {
       setLoading(false);
@@ -428,11 +467,55 @@ export default function GenerateOutfit() {
         </div>
       )}
 
+      {/* Disliked combos management panel */}
+      {userId && savedDislikes.length > 0 && (
+        <div className="mt-6 card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-medium">👎 Disliked colour combos</h2>
+              <p className="text-xs text-text-muted mt-1">These combinations won't appear in future suggestions. Remove any to allow them again.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {savedDislikes.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-orange-500/40 bg-orange-500/10 text-sm"
+              >
+                <span className="text-orange-300">{d.color_fingerprint}</span>
+                <button
+                  type="button"
+                  className="text-orange-400 hover:text-white transition text-base leading-none"
+                  title="Remove — allow this combo again"
+                  onClick={async () => {
+                    try {
+                      await undislikeCombo(userId, d.color_fingerprint);
+                      setSavedDislikes(prev => prev.filter(x => x.id !== d.id));
+                      setDislikedCombos(prev => { const s = new Set(prev); s.delete(d.color_fingerprint); return s; });
+                    } catch(e) { console.error(e); }
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-
-      {err && (
-        <div className="mt-6 card p-4 bg-red-500/10 border-red-400/50">
-          <p className="text-red-400">{err}</p>
+      {err && !suggestion && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-gradient-to-br from-panel to-background border border-border rounded-3xl p-10 max-w-md w-full shadow-2xl text-center">
+            <div className="text-5xl mb-4">👗</div>
+            <h2 className="text-2xl font-bold text-red-400 mb-3">Can't Build an Outfit</h2>
+            <p className="text-text-muted mb-8">{err}</p>
+            <button
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600 transition"
+              onClick={() => setErr("")}
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
 
@@ -442,7 +525,51 @@ export default function GenerateOutfit() {
         const currentEntry = suggestion.outfits?.[outfitIndex];
         const outfit = currentEntry?.outfit || suggestion.outfit || suggestion;
         const score = currentEntry?.score;
-        const rankEmoji = ["🥇", "🥈", "🥉"][outfitIndex] || `#${outfitIndex + 1}`;
+        const fingerprint = currentEntry?.color_fingerprint;
+        const isLiked = fingerprint ? likedCombos.has(fingerprint) : false;
+        const isDisliked = fingerprint ? dislikedCombos.has(fingerprint) : false;
+        const rankEmoji = ["\uD83E\uDD47", "\uD83E\uDD48", "\uD83E\uDD49"][outfitIndex] || `#${outfitIndex + 1}`;
+
+        async function handleToggleLike() {
+          if (!userId || !fingerprint) return;
+          try {
+            if (isLiked) {
+              await unlikeCombo(userId, fingerprint);
+              setLikedCombos(prev => { const s = new Set(prev); s.delete(fingerprint); return s; });
+            } else {
+              if (isDisliked) {
+                await undislikeCombo(userId, fingerprint);
+                setDislikedCombos(prev => { const s = new Set(prev); s.delete(fingerprint); return s; });
+              }
+              await likeCombo(userId, fingerprint);
+              setLikedCombos(prev => new Set([...prev, fingerprint]));
+            }
+          } catch(e) { console.error("like toggle failed", e); }
+        }
+
+        async function handleToggleDislike() {
+          if (!userId || !fingerprint) return;
+          try {
+            if (isDisliked) {
+              await undislikeCombo(userId, fingerprint);
+              setDislikedCombos(prev => { const s = new Set(prev); s.delete(fingerprint); return s; });
+              setSavedDislikes(prev => prev.filter(x => x.color_fingerprint !== fingerprint));
+            } else {
+              if (isLiked) {
+                await unlikeCombo(userId, fingerprint);
+                setLikedCombos(prev => { const s = new Set(prev); s.delete(fingerprint); return s; });
+              }
+              const result = await dislikeCombo(userId, fingerprint);
+              setDislikedCombos(prev => new Set([...prev, fingerprint]));
+              // add to panel if not already there (result.id may not be present; refetch if needed)
+              setSavedDislikes(prev =>
+                prev.some(x => x.color_fingerprint === fingerprint)
+                  ? prev
+                  : [...prev, { id: result?.id ?? Date.now(), color_fingerprint: fingerprint }]
+              );
+            }
+          } catch(e) { console.error("dislike toggle failed", e); }
+        }
 
         return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -459,6 +586,36 @@ export default function GenerateOutfit() {
                 <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30">
                   <span className="text-sm text-text-muted">ML Score</span>
                   <span className="text-lg font-bold text-purple-400">{score}/10</span>
+                </div>
+              )}
+
+              {/* Like / Dislike buttons */}
+              {fingerprint && (
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleLike}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
+                    style={isLiked
+                      ? { borderColor: "#ec4899", background: "rgba(236,72,153,0.12)", color: "#ec4899" }
+                      : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
+                    }
+                    title={isLiked ? "Un-like — allow this combo again" : "Like — save this combo (won't repeat)"}
+                  >
+                    {isLiked ? "❤️ Liked" : "🤍 Like"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleDislike}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
+                    style={isDisliked
+                      ? { borderColor: "#f97316", background: "rgba(249,115,22,0.12)", color: "#f97316" }
+                      : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
+                    }
+                    title={isDisliked ? "Un-dislike — allow this combo again" : "Dislike — never suggest this combo again"}
+                  >
+                    {isDisliked ? "👎 Disliked" : "👎 Dislike"}
+                  </button>
                 </div>
               )}
               {/* Weather summary */}

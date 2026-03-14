@@ -18,6 +18,7 @@ class Prediction(TypedDict):
     color: str
     color_hex: str  # RGB hex value like "#1a2b3c"
     color_hsv: str  # HSV values as "hue,saturation,value" (e.g., "240,50,80")
+    secondary_color: str  # second most prominent color, or empty string
     season: str
     formality: str
 
@@ -145,12 +146,24 @@ def _postprocess(p: dict) -> Prediction:
         if formality in ["casual", "smart_casual"]:
             formality = "semi_formal"
 
+    # secondary color
+    raw_sec = str(p.get("secondary_color", "") or "").strip()
+    secondary_color = _normalize(
+        raw_sec,
+        [
+            "black", "white", "gray", "navy", "blue", "green", "red", "yellow",
+            "orange", "brown", "beige", "cream", "purple", "pink", "multicolor",
+        ],
+        "",
+    ) if raw_sec else ""
+
     return {
         "category": cat,
         "outfit_part": outfit_part,
         "color": col,
         "color_hex": color_hex,
         "color_hsv": color_hsv,
+        "secondary_color": secondary_color,
         "season": season,
         "formality": formality,
     }
@@ -180,7 +193,7 @@ def classify_with_openai(image_path: str) -> Prediction:
         "You are an AI wardrobe assistant analyzing a single clothing photo. "
         "Focus on the main clothing item, ignoring background (bed, floor, other objects). "
         "If the background is cluttered, estimate best you can. "
-        "Return STRICT JSON with the keys: category, outfit_part, color, color_hex, color_hsv, season, formality.\n"
+        "Return STRICT JSON with the keys: category, outfit_part, color, color_hex, color_hsv, secondary_color, season, formality.\n"
         "Allowed values:\n"
         f"- category: {', '.join([e.value for e in Category])}\n"
         f"- outfit_part: {', '.join([e.value for e in OutfitPart])}, other\n"
@@ -188,6 +201,8 @@ def classify_with_openai(image_path: str) -> Prediction:
         "- color_hex: RGB color in hex format (e.g., #1a2b3c). Analyze the actual color of the item and provide the closest hex value.\n"
         "- color_hsv: HSV color values as 'hue,saturation,value' (e.g., '240,50,80'). "
         "Hue: 0-360 degrees, Saturation: 0-100%, Value: 0-100%. Analyze the dominant color of the clothing item.\n"
+        "- secondary_color: the second most prominent color on the item (same allowed values as color). "
+        "Use an empty string if the item is a solid single color.\n"
         f"- season: {', '.join([e.value for e in Season])}\n"
         f"- formality: {', '.join([e.value for e in Formality])}\n"
         "SEASON RULES:\n"
@@ -210,6 +225,7 @@ def classify_with_openai(image_path: str) -> Prediction:
         "\"color\":\"navy\","
         "\"color_hex\":\"#001f3f\","
         "\"color_hsv\":\"210,100,25\","
+        "\"secondary_color\":\"\","
         "\"season\":\"fall_winter\","
         "\"formality\":\"smart_casual\""
         "}"
