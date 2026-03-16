@@ -345,19 +345,19 @@ def generate_training_data():
     add(["0,0,85", "0,0,25", "30,30,45", "0,0,10"], 9.4)       # white + charcoal + camel coat + black shoes
     add(["180,20,35", "170,15,30", None, "0,0,10"], 8.8)        # two muted teals + black shoes (subtle)
     add(["350,25,40", "0,0,80", "210,30,25", "0,0,10"], 9.0)   # dusty rose + off-white + navy coat
-    add(["40,30,70", "0,0,10", None, "30,20,30"], 9.2)          # light tan + black pants + brown shoes
+    add(["40,30,70", "0,0,10", None, "30,20,30"], 7.2)          # light tan + black pants + brown shoes
 
     # ─────────────────────────────────────────────────────────────
-    #  EXTRA TIER 2 — MORE GOOD  (7.0 – 8.5)
+    #  EXTRA TIER 2 — MORE GOOD  (7.0 – 8.8)
     # ─────────────────────────────────────────────────────────────
     add(["0,55,45", "0,0,10", "0,0,85", "0,0,10"], 8.3)        # muted red + black + white coat (classic)
     add(["270,40,35", "0,0,80", "0,0,10", "0,0,10"], 7.6)      # muted purple + off-white + black coat
-    add(["150,45,40", "30,30,50", "0,0,90", "0,0,10"], 7.8)    # forest green + tan + white coat
+    add(["150,45,40", "30,30,50", "0,0,90", "0,0,10"], 8.8)    # forest green + tan + white coat
     add(["30,50,55", "0,0,10", "210,50,35", "0,0,10"], 7.4)    # camel + black + blue coat
     add(["0,45,40", "210,40,30", None, "0,0,10"], 7.9)          # brick red + navy (classic pair)
     add(["330,35,45", "0,0,75", None, "30,20,25"], 7.5)         # mauve + light gray + brown shoes
     add(["180,50,40", "30,40,50", "0,0,10", "0,0,10"], 7.3)    # teal + tan + black coat (complement)
-    add(["60,40,55", "0,0,20", "0,0,80", "0,0,10"], 7.1)       # muted gold + dark gray + light gray coat
+    add(["60,40,55", "0,0,20", "0,0,80", "0,0,10"], 8.5)       # muted gold + dark gray + light gray coat
     add(["210,50,40", "0,0,80", "0,55,45", "0,0,10"], 8.0)     # blue + off-white + red coat (tricolor)
     add(["120,35,40", "0,0,10", "30,25,35", "0,0,10"], 7.7)    # olive + black + tan coat
 
@@ -406,9 +406,9 @@ def generate_training_data():
     add(["210,40,30", "0,0,85", None, "120,80,60"], 6.5)        # navy + white + BRIGHT GREEN shoes (ruins it)
     add(["210,40,30", "0,0,85", None, "30,25,25"], 9.0)         # navy + white + brown shoes (classic)
     add(["0,0,10", "0,0,80", None, "0,100,65"], 5.8)            # black + gray + BRIGHT RED shoes (jarring)
-    add(["0,0,10", "0,0,80", None, "0,0,10"], 7.5)              # black + gray + black shoes (safe but flat)
+    add(["0,0,10", "0,0,80", None, "0,0,10"], 8.5)              # black + gray + black shoes (safe but flat)
     add(["30,35,55", "0,0,10", None, "300,90,65"], 5.5)         # camel + black + NEON PINK shoes (loud)
-    add(["30,35,55", "0,0,10", None, "30,20,25"], 8.5)          # camel + black + brown shoes (great)
+    add(["30,35,55", "0,0,10", None, "30,20,25"], 7.1)          # camel + black + brown shoes (great)
 
     # ─────────────────────────────────────────────────────────────
     #  NEUTRALS vs COLORED MONOCHROME
@@ -417,7 +417,7 @@ def generate_training_data():
     # ─────────────────────────────────────────────────────────────
 
     # --- All-neutral outfits: GOOD (7.0 – 8.5) ---
-    add(["0,0,0", "0,0,100", None, "0,0,0"], 8.2)              # black + white + black shoes — timeless
+    add(["0,0,0", "0,0,100", None, "0,0,0"], 8.8)              # black + white + black shoes — timeless
     add(["0,0,0", "0,0,60", None, "0,0,0"], 7.8)               # black + gray + black shoes — clean
     add(["0,0,0", "0,0,100", "0,0,40", "0,0,0"], 8.5)          # black + white + charcoal coat — sharp
     add(["0,0,100", "0,0,25", None, "0,0,10"], 8.0)             # white top + charcoal pants + black shoes
@@ -428,24 +428,24 @@ def generate_training_data():
     add(["0,0,0", "30,20,50", None, "30,15,25"], 7.8)           # black + tan + brown shoes
 
     # --- All-same saturated color: BAD (2.0 – 4.0) ---
-    add(["0,70,50", "0,65,45", "0,75,55", "0,60,40"], 2.5)     # all red everything — looks like a mascot
-    add(["120,70,45", "120,65,40", "120,75,50", "120,60,35"], 2.5) # all green — looks like a tree
-    add(["240,70,50", "240,65,45", "240,75,55", "240,60,40"], 3.0) # all blue — too much
-    add(["300,70,50", "300,65,45", None, "300,60,40"], 2.8)     # all purple/magenta — costume
-    add(["60,70,55", "60,65,50", "60,75,60", "60,60,45"], 2.6)  # all yellow — overwhelming
-    add(["30,70,55", "30,65,50", "30,75,60", "30,60,45"], 3.0)  # all orange — traffic cone
-    add(["180,70,45", "180,65,40", None, "180,60,35"], 3.2)     # all teal — one-note
-    add(["330,70,50", "330,65,45", "330,75,55", "330,60,40"], 2.8) # all pink — too matchy
+    add(["0,70,50", "0,65,45", "0,75,55", "0,60,40"], 1.0)     # all red everything — looks like a mascot
+    add(["120,70,45", "120,65,40", "120,75,50", "120,60,35"], 1.0) # all green — looks like a tree
+    add(["240,70,50", "240,65,45", "240,75,55", "240,60,40"], 1.0) # all blue — too much
+    add(["300,70,50", "300,65,45", None, "300,60,40"], 2.6)     # all purple/magenta — costume
+    add(["60,70,55", "60,65,50", "60,75,60", "60,60,45"], 1.4)  # all yellow — overwhelming
+    add(["30,70,55", "30,65,50", "30,75,60", "30,60,45"], 1.5)  # all orange — traffic cone
+    add(["180,70,45", "180,65,40", None, "180,60,35"], 1.8)     # all teal — one-note
+    add(["330,70,50", "330,65,45", "330,75,55", "330,60,40"], 1.5) # all pink — too matchy
 
     # --- Same color + one neutral = still bad but slightly better ---
-    add(["0,70,50", "0,65,45", "0,0,10", "0,60,40"], 4.0)      # red + red + black coat + red shoes — mostly red
-    add(["120,70,45", "120,65,40", "0,0,80", "120,60,35"], 4.2)  # green + green + white coat + green shoes
-    add(["240,70,50", "240,65,45", "0,0,10", "240,60,40"], 4.0) # blue + blue + black coat + blue shoes
+    add(["0,70,50", "0,65,45", "0,0,10", "0,60,40"], 2.6)      # red + red + black coat + red shoes — mostly red
+    add(["120,70,45", "120,65,40", "0,0,80", "120,60,35"], 2.2)  # green + green + white coat + green shoes
+    add(["240,70,50", "240,65,45", "0,0,10", "240,60,40"], 2.0) # blue + blue + black coat + blue shoes
 
     # --- Neutral monochrome with variety = still good ---
-    add(["0,0,10", "0,0,10", "0,0,10", "0,0,10"], 6.0)         # literally all black — wearable but flat
-    add(["0,0,95", "0,0,95", None, "0,0,95"], 5.8)              # literally all white — wearable but flat
-    add(["0,0,10", "0,0,10", None, "0,0,10"], 6.5)              # all black 3pc — classic, acceptable
+    add(["0,0,10", "0,0,10", "0,0,10", "0,0,10"], 7.4)         # literally all black — wearable but flat
+    add(["0,0,95", "0,0,95", None, "0,0,95"], 7.4)              # literally all white — wearable but flat
+    add(["0,0,10", "0,0,10", None, "0,0,10"], 7.4)              # all black 3pc — classic, acceptable
 
     # Write all examples to CSV (overwrites old file)
     write_training_data()
