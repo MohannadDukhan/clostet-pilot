@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Sparkles, Upload, UserPlus, Shirt, Info } from "lucide-react";
+import { Sparkles, Upload, UserPlus, Shirt } from "lucide-react";
 import { listUsers } from "../api";
 
 export default function Navbar({ user, setUser }) {
@@ -57,7 +57,7 @@ export default function Navbar({ user, setUser }) {
               <Sparkles size={18} />
             </span>
             <span className="font-semibold text-sm tracking-wide">
-              Closet Pilot
+              Outfit Maker
             </span>
           </Link>
 
@@ -65,12 +65,7 @@ export default function Navbar({ user, setUser }) {
             <NavLink to="/" className={navLinkClass} end>
               Home
             </NavLink>
-            <NavLink to="/about" className={navLinkClass}>
-              <span className="inline-flex items-center gap-1">
-                <Info size={12} /> About
-              </span>
-            </NavLink>
-            <NavLink to="/create-user" className={navLinkClass}>
+<NavLink to="/create-user" className={navLinkClass}>
               <span className="inline-flex items-center gap-1">
                 <UserPlus size={12} /> Create User
               </span>

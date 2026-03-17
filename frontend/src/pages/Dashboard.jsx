@@ -109,7 +109,7 @@ export default function Dashboard() {
           <div>
             <p className="text-sm font-medium">Your wardrobe is empty.</p>
             <p className="text-xs text-text-muted mt-1">
-              Start by uploading a few tops and bottoms so Closet Pilot can generate your first outfits.
+              Start by uploading a few tops and bottoms so Outfit Maker can generate your first outfits.
             </p>
           </div>
           <a href="/upload" className="btn btn-accent text-xs">
@@ -279,8 +279,7 @@ export default function Dashboard() {
                         <option value="">—</option>
                         <option value="casual">casual</option>
                         <option value="smart_casual">smart casual</option>
-                        <option value="semi_formal">semi formal</option>
-                        <option value="formal">formal</option>
+                        <option value="polished">polished</option>
                       </select>
 
                       <label className="text-xs font-medium mb-1">season</label>

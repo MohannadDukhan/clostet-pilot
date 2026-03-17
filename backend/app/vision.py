@@ -120,31 +120,30 @@ def _postprocess(p: dict) -> Prediction:
     # ----- formality normalization -----
     raw_form = str(p.get("formality", "casual")).lower().strip()
 
-    allowed = [e.value for e in Formality]
-
-    # simple mapping for common synonyms
-    if raw_form in allowed:
+    # simple mapping for common synonyms → 3-level system
+    if raw_form in {"casual", "smart_casual", "polished"}:
         formality = raw_form
     elif raw_form in {"sporty", "athletic", "gym", "streetwear"}:
         formality = "casual"
-    elif raw_form in {"business_casual"}:
+    elif raw_form in {"business_casual", "business casual"}:
         formality = "smart_casual"
-    elif raw_form in {"business", "dressy"}:
-        formality = "semi_formal"
+    elif raw_form in {"semi_formal", "semiformal", "semi formal", "formal", "dressy", "business"}:
+        formality = "polished"
     elif "formal" in raw_form:
-        formality = "formal"
+        formality = "polished"
     else:
         formality = "casual"
 
     # category-based minimums to fix suits / dress pants / blazers
     cat_lower = (cat or "").lower()
     if any(x in cat_lower for x in ["suit", "dress_pant", "trouser"]):
-        # suit pieces and dress pants should never be below semi_formal
+        # suit pieces and dress pants should be at least polished
         if formality in ["casual", "smart_casual"]:
-            formality = "semi_formal"
+            formality = "polished"
     if any(x in cat_lower for x in ["blazer", "sport_coat"]):
-        if formality in ["casual", "smart_casual"]:
-            formality = "semi_formal"
+        # blazers are at minimum smart_casual
+        if formality == "casual":
+            formality = "smart_casual"
 
     # secondary color
     raw_sec = str(p.get("secondary_color", "") or "").strip()
@@ -214,11 +213,10 @@ def classify_with_openai(image_path: str) -> Prediction:
         "- Use fall for light jackets, flannels, cardigans, or light sweaters.\n"
         "- Use all_season for items usable year-round (jeans, chinos, basic t-shirts).\n"
         "FORMALITY RULES:\n"
-        "- Allowed values: casual, smart_casual, semi_formal, formal.\n"
+        "- Allowed values: casual, smart_casual, polished.\n"
         "- Treat gym wear, hoodies, t-shirts, sweatpants, shorts, sneakers as casual.\n"
         "- Treat polos, nice knitwear, chinos, clean sneakers/loafers as smart_casual.\n"
-        "- Treat blazers, sport coats, dress shirts, dress pants as at least semi_formal.\n"
-        "- Treat full suits, suit jackets with matching dress pants, and ties as formal.\n"
+        "- Treat blazers, sport coats, dress shirts, dress pants, suits, and formal wear as polished.\n"
         "Example output: {"
         "\"outfit_part\":\"top\","
         "\"category\":\"sweater\","

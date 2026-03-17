@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import RootLayout from "./layouts/RootLayout";
 
 import Home from "./pages/Home";
-import About from "./pages/About";
 import CreateUser from "./pages/CreateUser";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
@@ -20,8 +19,7 @@ export default function App() {
       <Routes>
         <Route element={<RootLayout />}>
           <Route index element={<Home />} />
-          <Route path="about" element={<About />} />
-          <Route path="create-user" element={<CreateUser />} />
+<Route path="create-user" element={<CreateUser />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="upload" element={<Upload />} />
           <Route path="profile" element={<EditProfile />} />   {/* new */}

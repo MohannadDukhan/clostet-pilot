@@ -26,7 +26,7 @@
     "categories": ["boots", "leather_boots"],
     "colors": ["black", "brown", "neutral"],
     "seasons": ["fall", "winter"],
-    "formality": ["smart_casual", "semi_formal"],
+    "formality": ["smart_casual", "polished"],
     "description": "Boots add structure and seasonal warmth for cooler days."
   },
   {
@@ -36,8 +36,8 @@
     "categories": ["dress_shoes", "oxfords", "derby"],
     "colors": ["black", "brown", "neutral"],
     "seasons": ["all"],
-    "formality": ["semi_formal", "formal", "business_casual"],
-    "description": "A formal shoe option improves coverage for events and office-ready looks."
+    "formality": ["polished"],
+    "description": "A polished shoe option improves coverage for events and office-ready looks."
   },
   {
     "id": "brown_loafers",
@@ -46,7 +46,7 @@
     "categories": ["loafers", "dress_shoes"],
     "colors": ["brown", "neutral"],
     "seasons": ["spring", "summer", "fall"],
-    "formality": ["smart_casual", "business_casual"],
+    "formality": ["smart_casual"],
     "description": "Loafers bridge casual and polished outfits without over-dressing."
   },
   {
@@ -96,8 +96,8 @@
     "categories": ["shirt", "button_down", "dress_shirt"],
     "colors": ["white", "neutral"],
     "seasons": ["all"],
-    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
-    "description": "A polished top that expands smart-casual and formal combinations."
+    "formality": ["smart_casual", "polished"],
+    "description": "A polished top that expands smart-casual and polished combinations."
   },
   {
     "id": "button_down_blue",
@@ -106,7 +106,7 @@
     "categories": ["shirt", "button_down", "dress_shirt"],
     "colors": ["blue", "light_blue", "navy", "neutral"],
     "seasons": ["all"],
-    "formality": ["smart_casual", "business_casual", "semi_formal"],
+    "formality": ["smart_casual", "polished"],
     "description": "A reliable office-ready top that still works in casual settings."
   },
   {
@@ -116,7 +116,7 @@
     "categories": ["sweater", "knit"],
     "colors": ["gray", "grey", "cream", "beige", "navy", "neutral"],
     "seasons": ["fall", "winter"],
-    "formality": ["smart_casual", "business_casual"],
+    "formality": ["smart_casual"],
     "description": "A refined cold-weather top for clean layered outfits."
   },
   {
@@ -126,7 +126,7 @@
     "categories": ["polo", "shirt"],
     "colors": ["white", "black", "navy", "neutral"],
     "seasons": ["spring", "summer", "fall"],
-    "formality": ["smart_casual", "business_casual"],
+    "formality": ["smart_casual"],
     "description": "A structured casual top that upgrades basic combinations."
   },
   {
@@ -156,7 +156,7 @@
     "categories": ["chinos", "pants", "trousers"],
     "colors": ["tan", "beige", "khaki", "neutral"],
     "seasons": ["spring", "summer", "fall"],
-    "formality": ["smart_casual", "business_casual"],
+    "formality": ["smart_casual"],
     "description": "A smart-casual bottom that pairs well with shirts and polos."
   },
   {
@@ -166,7 +166,7 @@
     "categories": ["chinos", "pants", "trousers"],
     "colors": ["black", "neutral"],
     "seasons": ["all"],
-    "formality": ["smart_casual", "business_casual"],
+    "formality": ["smart_casual"],
     "description": "A clean dark bottom for polished everyday outfits."
   },
   {
@@ -176,8 +176,8 @@
     "categories": ["trousers", "pants"],
     "colors": ["gray", "grey", "black", "navy", "neutral"],
     "seasons": ["fall", "winter"],
-    "formality": ["business_casual", "semi_formal", "formal"],
-    "description": "A structured bottom that improves formal and office coverage."
+    "formality": ["polished"],
+    "description": "A structured bottom that improves polished and office coverage."
   },
   {
     "id": "tailored_black_pants",
@@ -186,8 +186,8 @@
     "categories": ["pants", "trousers", "slacks"],
     "colors": ["black", "neutral"],
     "seasons": ["all"],
-    "formality": ["business_casual", "semi_formal", "formal"],
-    "description": "A formal-friendly bottom for cleaner outfit lines."
+    "formality": ["polished"],
+    "description": "A polished-friendly bottom for cleaner outfit lines."
   },
   {
     "id": "relaxed_neutral_cargo",
@@ -226,7 +226,7 @@
     "categories": ["coat", "wool_coat"],
     "colors": ["black", "gray", "grey", "camel", "neutral"],
     "seasons": ["fall", "winter"],
-    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
+    "formality": ["smart_casual", "polished"],
     "description": "A polished cold-weather layer for dressier outfit stacks."
   },
   {
@@ -256,8 +256,8 @@
     "categories": ["blazer", "jacket"],
     "colors": ["navy", "blue", "neutral"],
     "seasons": ["all"],
-    "formality": ["smart_casual", "business_casual", "semi_formal", "formal"],
-    "description": "A key formal layer that elevates tops and trousers quickly."
+    "formality": ["smart_casual", "polished"],
+    "description": "A key polished layer that elevates tops and trousers quickly."
   },
   {
     "id": "puffer_jacket",
@@ -276,7 +276,7 @@
     "categories": ["coat", "trench_coat"],
     "colors": ["beige", "tan", "black", "neutral"],
     "seasons": ["spring", "fall"],
-    "formality": ["smart_casual", "business_casual", "semi_formal"],
+    "formality": ["smart_casual", "polished"],
     "description": "A weather-ready coat that keeps outfits sharp in transition seasons."
   },
   {

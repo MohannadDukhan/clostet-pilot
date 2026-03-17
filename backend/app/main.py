@@ -36,9 +36,25 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
 
 
+def _migrate_formality_values() -> None:
+    """
+    One-time idempotent migration: normalize legacy formality values in the
+    Item table to the 3-level system (casual / smart_casual / polished).
+    Runs at startup before any ORM reads so SQLModel never sees removed enum
+    values.
+    """
+    from sqlalchemy import text
+    from .db import engine
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE item SET formality = 'casual'      WHERE formality = 'sporty'"))
+        conn.execute(text("UPDATE item SET formality = 'smart_casual' WHERE formality = 'business_casual'"))
+        conn.execute(text("UPDATE item SET formality = 'polished'     WHERE formality IN ('semi_formal', 'formal')"))
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    _migrate_formality_values()
 
 
 # ---- Users ----
@@ -48,7 +64,7 @@ def list_users(session: Session = Depends(get_session)):
 
 
 
-FORMALITY_ORDER = ["casual", "smart_casual", "semi_formal", "formal"]
+FORMALITY_ORDER = ["casual", "smart_casual", "polished"]
 
 
 def _formality_rank(val: Optional[str]) -> int:
@@ -354,7 +370,7 @@ def _fits_formality(item, desired: Optional[str]) -> bool:
     r_desired = _formality_rank(desired)
 
     # allow items within 1 step of the requested level
-    # e.g. smart_casual with semi_formal, semi_formal with formal
+    # e.g. casual with smart_casual, smart_casual with polished
     return abs(r_item - r_desired) <= 1
 
 
@@ -592,7 +608,7 @@ def _get_color_score(top_color, bottom_color, outer_color=None, shoes_color=None
 def _compatible(top, bottom, outer=None, shoes=None) -> bool:
     """
     Reject combos where any two pieces are 2+ formality levels apart.
-    1 level apart is fine (e.g. casual + smart_casual). 2+ is a mismatch.
+    1 level apart is fine (e.g. casual + smart_casual, smart_casual + polished).
     """
     pieces = [p for p in (top, bottom, outer, shoes) if p is not None]
     ranks = [_formality_rank(getattr(p, "formality", None)) for p in pieces]
@@ -751,7 +767,7 @@ def _pick_outfit_legacy(
     import itertools, time
 
     def _want_outer() -> bool:
-        if formality in ("semi_formal", "formal"):
+        if formality == "polished":
             return True
         if season in ("winter", "fall"):
             return True

@@ -47,25 +47,26 @@ FORMALITY_SYNONYMS = {
     "smartcasual": "smart_casual",
     "smart_casual": "smart_casual",
     "smart casual": "smart_casual",
-    "semi_formal": "formal",
-    "semiformal": "formal",
-    "semi formal": "formal",
-    "business casual": "business_casual",
-    "business_casual": "business_casual",
-    "sport": "sporty",
-    "athletic": "sporty",
+    "semi_formal": "polished",
+    "semiformal": "polished",
+    "semi formal": "polished",
+    "formal": "polished",
+    "dressy": "polished",
+    "business casual": "smart_casual",
+    "business_casual": "smart_casual",
+    "sport": "casual",
+    "athletic": "casual",
+    "sporty": "casual",
 }
 
 FORMALITY_COMPAT = {
-    "casual": {"casual", "smart_casual", "sporty"},
-    "sporty": {"sporty", "casual"},
-    "smart_casual": {"casual", "smart_casual", "business_casual", "formal"},
-    "business_casual": {"business_casual", "smart_casual", "formal"},
-    "formal": {"formal", "business_casual", "smart_casual"},
+    "casual": {"casual", "smart_casual"},
+    "smart_casual": {"casual", "smart_casual", "polished"},
+    "polished": {"polished", "smart_casual"},
 }
 
-CASUAL_BAND = {"casual", "smart_casual", "sporty"}
-FORMAL_BAND = {"smart_casual", "formal", "business_casual"}
+CASUAL_BAND = {"casual", "smart_casual"}
+POLISHED_BAND = {"smart_casual", "polished"}
 
 FALLBACK_REASON_TEXT = {
     "white_sneakers": "Improves shoe versatility for casual outfits.",
@@ -123,7 +124,7 @@ def normalize_formality(value: Optional[str]) -> str:
     if not raw or raw in {"unknown", "none", "null", "any"}:
         return ""
     raw = FORMALITY_SYNONYMS.get(raw, raw)
-    return raw if raw in {"casual", "smart_casual", "business_casual", "formal", "sporty"} else ""
+    return raw if raw in {"casual", "smart_casual", "polished"} else ""
 
 
 
@@ -197,15 +198,15 @@ def _supports_band(template_formality: List[str], band: str) -> bool:
     normalized.discard("")
     if not normalized:
         return True
-    if band == "formal_band":
-        return bool(normalized & FORMAL_BAND)
+    if band == "polished_band":
+        return bool(normalized & POLISHED_BAND)
     return bool(normalized & CASUAL_BAND)
 
 
 
-def _supports_formal_or_smart(template_formality: List[str]) -> bool:
+def _supports_polished_or_smart(template_formality: List[str]) -> bool:
     normalized = {normalize_formality(v) for v in (template_formality or [])}
-    return bool(normalized & {"smart_casual", "business_casual", "formal"})
+    return bool(normalized & {"smart_casual", "polished"})
 
 
 
@@ -299,14 +300,13 @@ def compute_gap_recommendations(session: Session, user_id: int, limit: int = 3) 
 
     formalish = (
         formality_counter.get("smart_casual", 0)
-        + formality_counter.get("business_casual", 0)
-        + formality_counter.get("formal", 0)
+        + formality_counter.get("polished", 0)
     )
     formal_freq = (formalish / total_history) if total_history else 0.0
 
     dominant_formality_values = [key for key, _ in formality_counter.most_common(2) if key]
-    if any(v in FORMAL_BAND for v in dominant_formality_values):
-        dominant_band = "formal_band"
+    if any(v in POLISHED_BAND for v in dominant_formality_values):
+        dominant_band = "polished_band"
     else:
         dominant_band = "casual_band"
 
@@ -354,7 +354,7 @@ def compute_gap_recommendations(session: Session, user_id: int, limit: int = 3) 
                 weather_relevance_score += 0.4
 
         formality_relevance_score = 0.0
-        if formal_freq >= 0.35 and _supports_formal_or_smart(template_formality):
+        if formal_freq >= 0.35 and _supports_polished_or_smart(template_formality):
             formality_relevance_score = 0.2
 
         total_score = (
@@ -374,7 +374,7 @@ def compute_gap_recommendations(session: Session, user_id: int, limit: int = 3) 
             reasons.append("LOW_DIVERSITY_SHOES")
         if part == "outerwear" and cold_freq >= 0.4:
             reasons.append("COLD_WEATHER_OUTERWEAR")
-        if formal_freq >= 0.35 and _supports_formal_or_smart(template_formality):
+        if formal_freq >= 0.35 and _supports_polished_or_smart(template_formality):
             reasons.append("FORMAL_COVERAGE")
 
         strict_recs.append(

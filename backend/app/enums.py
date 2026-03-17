@@ -21,10 +21,7 @@ class OutfitPart(str, Enum):
 class Formality(str, Enum):
     casual = "casual"
     smart_casual = "smart_casual"
-    semi_formal = "semi_formal"
-    formal = "formal"
-    business_casual = "business_casual"
-    sporty = "sporty"
+    polished = "polished"
 
 class Category(str, Enum):
     t_shirt = "t_shirt"

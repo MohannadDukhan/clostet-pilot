@@ -15,8 +15,7 @@ const FORMALITY = [
   { value: "any", label: "Any Occasion" },
   { value: "casual", label: "Casual" },
   { value: "smart_casual", label: "Smart Casual" },
-  { value: "semi_formal", label: "Semi Formal" },
-  { value: "formal", label: "Formal" },
+  { value: "polished", label: "Polished" },
 ];
 
 
