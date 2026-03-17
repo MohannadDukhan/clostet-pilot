@@ -16,9 +16,13 @@ __pycache__/
 .vscode/
 .idea/
 
-# ML Model files (generated)
-backend/*.pkl
-backend/color_model.pkl
+# ML training artifacts
 backend/training_data.csv
 backend/training_archives/
 backend/training_backups/
+
+# ignore other pkl files
+backend/*.pkl
+
+# but keep the trained production model
+!backend/color_model.pkl
