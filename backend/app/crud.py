@@ -1,13 +1,13 @@
-import uuid
+import os
 from pathlib import Path
 from typing import Iterable, Optional, List
+import uuid
 
 from sqlmodel import Session, select
 
 from .models import User, Item, Outfit, Feedback
 
-# storage root: backend/storage
-STORAGE_ROOT = Path(__file__).resolve().parent.parent / "storage"
+STORAGE_ROOT = Path(os.getenv("STORAGE_ROOT", "/data/storage"))
 
 
 def create_user(

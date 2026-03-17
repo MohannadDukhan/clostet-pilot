@@ -30,8 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+
 # serve uploaded images
-STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
+STORAGE_DIR = Path(os.getenv("STORAGE_ROOT", "/data/storage"))
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
 
