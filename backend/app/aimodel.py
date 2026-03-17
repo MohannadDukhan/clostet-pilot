@@ -1,17 +1,19 @@
-import csv
+﻿import csv
 from pathlib import Path
 import pickle
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "color_model.pkl"
 
-# Try to load trained model (if exists)
-MODEL_PATH = Path(__file__).parent.parent / "color_model.pkl"
+trained_model = None
 try:
-    with open(MODEL_PATH, 'rb') as f:
+    with open(MODEL_PATH, "rb") as f:
         trained_model = pickle.load(f)
     print(f"✅ Loaded trained model from {MODEL_PATH}")
-except FileNotFoundError:
+except Exception as e:
+    print(f"⚠️ No trained model found at {MODEL_PATH}. Will use placeholder scoring.")
+    print(f"Model load error: {e}")
     trained_model = None
-    print(f"⚠️  No trained model found at {MODEL_PATH}. Will use placeholder scoring.")
 
 
 def hue_distance(h1: float, h2: float) -> float:
