@@ -1,4 +1,4 @@
-﻿fastapi==0.117.1
+fastapi==0.117.1
 uvicorn==0.37.0
 sqlmodel==0.0.25
 SQLAlchemy==2.0.43
@@ -28,3 +28,4 @@ pandas>=2.3.3
 # Auth
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1
