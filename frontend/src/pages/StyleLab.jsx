@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { API, listUsers, listUserItems, scoreOutfit } from "../api";
+import { useNavigate } from "react-router-dom";
+import { API, listUserItems, scoreOutfit } from "../api";
 
 function imageSrc(item) {
   const url = item?.image_url || "";
@@ -17,10 +18,18 @@ const SLOTS = [
   { key: "shoes",  label: "Shoes",     icon: "👟", part: "shoes" },
 ];
 
+function getUser() {
+  try {
+    const raw = localStorage.getItem("cp:user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function ScoreGauge({ score }) {
   const pct = Math.max(0, Math.min(score / 10, 1)) * 100;
-  const hue = (pct / 100) * 120; // red→green
-
+  const hue = (pct / 100) * 120;
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative w-40 h-40">
@@ -54,7 +63,6 @@ function VerdictBadge({ verdict }) {
     orange: "bg-orange-500/15 border-orange-500/40 text-orange-400",
     red: "bg-red-500/15 border-red-500/40 text-red-400",
   }[verdict.color] || "bg-panel border-border text-text";
-
   return (
     <span className={`inline-flex items-center gap-2 px-5 py-2 rounded-full border text-lg font-semibold ${bg}`}>
       <span className="text-2xl">{verdict.emoji}</span>
@@ -80,43 +88,24 @@ function FeatureBar({ label, value, max, unit = "", info }) {
   );
 }
 
-
 export default function StyleLab() {
-  const [users, setUsers] = useState([]);
-  const [userId, setUserId] = useState(null);
+  const navigate = useNavigate();
+  const user = getUser();
+  const userId = user?.id ?? null;
+
   const [items, setItems] = useState([]);
-
-  // Selections: { top: itemId, bottom: itemId, outer: itemId, shoes: itemId }
   const [picks, setPicks] = useState({ top: null, bottom: null, outer: null, shoes: null });
-  const [openSlot, setOpenSlot] = useState(null); // which slot picker is open
-
+  const [openSlot, setOpenSlot] = useState(null);
   const [result, setResult] = useState(null);
   const [scoring, setScoring] = useState(false);
   const [err, setErr] = useState("");
 
-  // Load users
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await listUsers();
-        setUsers(list || []);
-        const saved = localStorage.getItem("cp:selectedUserId");
-        if (saved && list.some((u) => String(u.id) === String(saved))) {
-          setUserId(Number(saved));
-        } else if (list.length) {
-          setUserId(list[0].id);
-        }
-      } catch {
-        setErr("Failed to load users");
-      }
-    })();
+    if (!user) {
+      navigate("/login", { replace: true });
+    }
   }, []);
 
-  useEffect(() => {
-    if (userId != null) localStorage.setItem("cp:selectedUserId", String(userId));
-  }, [userId]);
-
-  // Load items
   useEffect(() => {
     if (!userId) { setItems([]); return; }
     (async () => {
@@ -140,13 +129,10 @@ export default function StyleLab() {
   };
 
   const filledCount = Object.values(picks).filter(Boolean).length;
-  const canScore = picks.top || picks.bottom; // need at least one
 
-  // Auto-score whenever picks change
   const doScore = useCallback(async () => {
     if (!userId) return;
     if (!picks.top && !picks.bottom) { setResult(null); return; }
-
     setScoring(true);
     setErr("");
     try {
@@ -175,6 +161,8 @@ export default function StyleLab() {
     }
   }, [picks, doScore]);
 
+  if (!user) return null;
+
   function selectItem(slotKey, itemId) {
     setPicks((prev) => ({ ...prev, [slotKey]: prev[slotKey] === itemId ? null : itemId }));
     setOpenSlot(null);
@@ -199,7 +187,6 @@ export default function StyleLab() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
@@ -209,23 +196,11 @@ export default function StyleLab() {
             Pick pieces from your wardrobe & see how they score together. Experiment freely!
           </p>
         </div>
-        <select
-          className="bg-panel border border-border rounded-xl p-2.5 text-sm min-w-[180px]"
-          value={userId ?? ""}
-          onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)}
-        >
-          {!users.length && <option value="">No users</option>}
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.name} • {u.city}</option>
-          ))}
-        </select>
       </div>
 
-      {/* Main layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT: Item Slots */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Quick action bar */}
           <div className="flex gap-2 mb-2">
             <button onClick={randomize}
               className="btn text-xs gap-1.5" disabled={items.length < 2}>
@@ -237,7 +212,6 @@ export default function StyleLab() {
             </button>
           </div>
 
-          {/* 4 Slots */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {SLOTS.map(({ key, label, icon, part }) => {
               const item = pickedItem(key);
@@ -250,7 +224,6 @@ export default function StyleLab() {
 
               return (
                 <div key={key} className="relative">
-                  {/* The slot card */}
                   <div
                     className={`card p-3 cursor-pointer transition-all hover:shadow-lg group ${
                       isClashing ? "ring-2 ring-red-400/60" : ""
@@ -311,7 +284,6 @@ export default function StyleLab() {
                     )}
                   </div>
 
-                  {/* Picker dropdown */}
                   {isOpen && (
                     <div className="absolute z-40 top-full left-0 right-0 mt-2 max-h-72 overflow-y-auto bg-panel border border-border rounded-2xl shadow-2xl p-2 animate-fadeIn"
                       style={{ minWidth: "100%" }}>
@@ -370,7 +342,6 @@ export default function StyleLab() {
             })}
           </div>
 
-          {/* Close open picker on clicking elsewhere */}
           {openSlot && (
             <div className="fixed inset-0 z-30" onClick={() => setOpenSlot(null)} />
           )}
@@ -387,13 +358,11 @@ export default function StyleLab() {
 
           {!scoring && result && (
             <div className="card p-6 space-y-6 animate-fadeIn">
-              {/* Score gauge */}
               <div className="flex flex-col items-center gap-3">
                 <ScoreGauge score={result.score} />
                 <VerdictBadge verdict={result.verdict} />
               </div>
 
-              {/* Explanations */}
               <div className="space-y-2.5">
                 <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Analysis</h3>
                 {result.explanations?.map((ex, i) => (
@@ -415,41 +384,13 @@ export default function StyleLab() {
                 ))}
               </div>
 
-              {/* Feature breakdown */}
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Feature Breakdown</h3>
-                <FeatureBar
-                  label="Avg Hue Distance"
-                  value={result.features.avg_hue_distance}
-                  max={180}
-                  unit="°"
-                  info="Lower is more harmonious. Under 40° = analogous, 150°+ = clashing"
-                />
-                <FeatureBar
-                  label="Max Hue Distance"
-                  value={result.features.max_hue_distance}
-                  max={180}
-                  unit="°"
-                  info="Worst pair hue clash. >120° usually means visible color tension"
-                />
-                <FeatureBar
-                  label="Avg Saturation"
-                  value={result.features.avg_saturation}
-                  max={100}
-                  info="Below 30 = muted/neutral palette, above 60 = very colorful"
-                />
-                <FeatureBar
-                  label="Loud Pieces (S≥60)"
-                  value={result.features.high_sat_count}
-                  max={4}
-                  info="Highly saturated garments. Best outfits have 0-1 loud pieces"
-                />
-                <FeatureBar
-                  label="Neutral Anchors (S<20)"
-                  value={result.features.neutral_count}
-                  max={4}
-                  info="Black, white, gray pieces that ground the outfit"
-                />
+                <FeatureBar label="Avg Hue Distance" value={result.features.avg_hue_distance} max={180} unit="°" info="Lower is more harmonious. Under 40° = analogous, 150°+ = clashing" />
+                <FeatureBar label="Max Hue Distance" value={result.features.max_hue_distance} max={180} unit="°" info="Worst pair hue clash. >120° usually means visible color tension" />
+                <FeatureBar label="Avg Saturation" value={result.features.avg_saturation} max={100} info="Below 30 = muted/neutral palette, above 60 = very colorful" />
+                <FeatureBar label="Loud Pieces (S≥60)" value={result.features.high_sat_count} max={4} info="Highly saturated garments. Best outfits have 0-1 loud pieces" />
+                <FeatureBar label="Neutral Anchors (S<20)" value={result.features.neutral_count} max={4} info="Black, white, gray pieces that ground the outfit" />
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-muted">Light/Dark Contrast</span>
                   <span className={`font-semibold ${result.features.has_contrast ? "text-green-400" : "text-text-muted"}`}>
@@ -477,7 +418,6 @@ export default function StyleLab() {
         </div>
       </div>
 
-      {/* Error */}
       {err && (
         <div className="mt-6 card p-4 bg-red-500/10 border-red-400/50">
           <p className="text-red-400 text-sm">{err}</p>

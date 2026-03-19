@@ -21,7 +21,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/create-user", { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
     let ignore = false;
@@ -85,7 +85,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold">Your wardrobe</h2>
           {user && (
             <p className="text-xs text-text-muted">
-              signed in as <span className="font-medium">{user.name}</span>
+              signed in as <span className="font-medium">{user.name || user.email}</span>
               {user.city ? ` · ${user.city}` : ""}
             </p>
           )}

@@ -10,17 +10,20 @@ from typing import List, Optional
 from pathlib import Path
 
 from .db import init_db, get_session
-from .schemas import UserCreate, UserRead, ItemRead, ItemUpdate
+from .schemas import UserCreate, UserRead, UserUpdate, ItemRead, ItemUpdate, SignupRequest, LoginRequest, TokenResponse
 from . import crud
 from .config import settings
 from .vision import classify_image
 from .aimodel import score_outfit_ml
-from .models import OutfitHistory, LikedOutfit, DislikedOutfit
+from .models import User, OutfitHistory, LikedOutfit, DislikedOutfit
 from .services.gap_recommendations import compute_gap_recommendations
 from .aimodel import score_outfit_ml, extract_features, hue_distance, trained_model
+from .auth import hash_password, verify_password, create_access_token, get_current_user
 from fastapi import Query
 
-app = FastAPI(title="Outfit Maker API", version="0.3.1")
+import os
+
+app = FastAPI(title="Outfit Maker API", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,8 +32,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-import os
 
 # serve uploaded images
 STORAGE_DIR = Path(os.getenv("STORAGE_ROOT", "/data/storage"))
@@ -53,17 +54,78 @@ def _migrate_formality_values() -> None:
         conn.execute(text("UPDATE item SET formality = 'polished'     WHERE formality IN ('semi_formal', 'formal')"))
 
 
+def _migrate_add_auth_columns() -> None:
+    """Add email and hashed_password columns to the user table if they don't exist."""
+    from sqlalchemy import text
+    from .db import engine
+    with engine.begin() as conn:
+        result = conn.execute(text("PRAGMA table_info(\"user\")"))
+        existing_cols = {row[1] for row in result.fetchall()}
+
+        if "email" not in existing_cols:
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN email TEXT'))
+            print("✓ Migration: added email column to user table")
+
+        if "hashed_password" not in existing_cols:
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN hashed_password TEXT'))
+            print("✓ Migration: added hashed_password column to user table")
+
+        # Unique index on email (partial — NULL emails don't conflict)
+        conn.execute(text(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ix_user_email ON "user"(email) WHERE email IS NOT NULL'
+        ))
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    _migrate_add_auth_columns()
     _migrate_formality_values()
 
 
+# ---- Auth ----
+
+@app.post("/auth/signup", response_model=TokenResponse)
+def signup(payload: SignupRequest, session: Session = Depends(get_session)):
+    email = payload.email.lower().strip()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Invalid email address")
+    if len(payload.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+    if not any(c.isdigit() for c in payload.password):
+        raise HTTPException(400, "Password must contain at least one number")
+    if not payload.city.strip():
+        raise HTTPException(400, "City is required")
+    if crud.get_user_by_email(session, email):
+        raise HTTPException(400, "An account with this email already exists")
+    hashed = hash_password(payload.password)
+    user = crud.create_user_auth(session, email, hashed, payload.city.strip())
+    token = create_access_token(user.id)
+    return {"token": token, "user": user}
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+def login(payload: LoginRequest, session: Session = Depends(get_session)):
+    email = payload.email.lower().strip()
+    user = crud.get_user_by_email(session, email)
+    if not user or not user.hashed_password:
+        raise HTTPException(401, "Invalid email or password")
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(401, "Invalid email or password")
+    token = create_access_token(user.id)
+    return {"token": token, "user": user}
+
+
 # ---- Users ----
+
+@app.get("/users/me", response_model=UserRead)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
 @app.get("/users", response_model=List[UserRead])
 def list_users(session: Session = Depends(get_session)):
     return crud.list_users(session)
-
 
 
 FORMALITY_ORDER = ["casual", "smart_casual", "polished"]
@@ -78,11 +140,9 @@ def _formality_rank(val: Optional[str]) -> int:
         return 0
 
 
-
 @app.post("/users", response_model=UserRead)
 def create_user(payload: UserCreate, session: Session = Depends(get_session)):
     try:
-        # NOTE: no gender here anymore
         user = crud.create_user(
             session,
             payload.name,
@@ -92,40 +152,41 @@ def create_user(payload: UserCreate, session: Session = Depends(get_session)):
         return user
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
 
 @app.put("/users/{user_id}", response_model=UserRead)
-def update_user(user_id: int, payload: UserCreate, session: Session = Depends(get_session)):
-    """Allow editing a user's name / city (and optional style preferences)."""
+def update_user_route(
+    user_id: int,
+    payload: UserUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
-    updated = crud.update_user(
-        session,
-        user,
-        name=payload.name,
-        city=payload.city,
-        style_preferences=payload.style_preferences,
-    )
+    updated = crud.update_user(session, user, **payload.model_dump(exclude_unset=True))
     return updated
 
 
-
 # ---- Items ----
+
 @app.post("/users/{user_id}/items", response_model=ItemRead)
 async def upload_item(
     user_id: int,
     file: UploadFile = File(...),
     allow_duplicate: bool = Query(False),
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
 
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
 
-    # file type guard
     filename_lower = (file.filename or "").lower()
     if not any(filename_lower.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
         raise HTTPException(status_code=400, detail="Only JPG, PNG, or WEBP images are allowed")
@@ -135,7 +196,6 @@ async def upload_item(
 
     existing = crud.find_item_by_hash(session, user_id, content_hash)
     if existing and not allow_duplicate:
-        # send a 409 with structured detail so the frontend can show a confirm
         raise HTTPException(
             status_code=409,
             detail={
@@ -147,7 +207,6 @@ async def upload_item(
 
     item = crud.create_item_with_file(session, user_id, file.filename, content, content_hash)
 
-
     print(
         "auto_classify_on_upload =",
         settings.auto_classify_on_upload,
@@ -155,7 +214,6 @@ async def upload_item(
         bool(settings.openai_api_key),
     )
 
-    # optional auto-classify
     if settings.auto_classify_on_upload:
         try:
             abs_path = (STORAGE_DIR / item.image_url).resolve()
@@ -171,33 +229,59 @@ async def upload_item(
 
 
 @app.get("/users/{user_id}/items", response_model=List[ItemRead])
-def list_items(user_id: int, session: Session = Depends(get_session)):
+def list_items(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     return crud.list_items_for_user(session, user_id)
 
 
 @app.patch("/items/{item_id}", response_model=ItemRead)
-def patch_item(item_id: int, payload: ItemUpdate, session: Session = Depends(get_session)):
+def patch_item(
+    item_id: int,
+    payload: ItemUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     item = crud.get_item(session, item_id)
     if not item:
         raise HTTPException(404, "Item not found")
-    return crud.update_item(session, item, **payload.dict(exclude_unset=True))
+    if item.user_id != current_user.id:
+        raise HTTPException(403, "Access denied")
+    return crud.update_item(session, item, **payload.model_dump(exclude_unset=True))
 
 
 @app.delete("/items/{item_id}")
-def delete_item(item_id: int, session: Session = Depends(get_session)):
+def delete_item(
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     item = crud.get_item(session, item_id)
     if not item:
         raise HTTPException(404, "Item not found")
+    if item.user_id != current_user.id:
+        raise HTTPException(403, "Access denied")
     crud.delete_item(session, item)
     return {"ok": True}
 
 
 # ---- on-demand classification ----
+
 @app.post("/items/{item_id}/classify", response_model=ItemRead)
-def classify_item(item_id: int, session: Session = Depends(get_session)):
+def classify_item(
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     item = crud.get_item(session, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    if item.user_id != current_user.id:
+        raise HTTPException(403, "Access denied")
     if not item.image_url:
         raise HTTPException(status_code=400, detail="Item has no image")
 
@@ -214,13 +298,13 @@ def classify_item(item_id: int, session: Session = Depends(get_session)):
         return updated
     except Exception as e:
         import traceback
-
         print("CLASSIFY ERROR:", repr(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"classification failed: {e}")
 
 
 # ---- Weather API ----
+
 def _weather_condition_from_code(code: Optional[int]) -> str:
     if code is None:
         return "unknown"
@@ -238,12 +322,7 @@ def _weather_condition_from_code(code: Optional[int]) -> str:
 
 
 def get_weather(city: str, target_date: date) -> dict:
-    """
-    Get weather forecast using Open-Meteo API.
-    Returns temperature and determines appropriate clothing season.
-    """
     try:
-        # Step 1: Geocode the city
         geo_url = "https://geocoding-api.open-meteo.com/v1/search"
         geo_resp = requests.get(
             geo_url,
@@ -251,14 +330,13 @@ def get_weather(city: str, target_date: date) -> dict:
             timeout=5
         )
         geo_data = geo_resp.json()
-        
+
         if not geo_data.get("results"):
             raise ValueError(f"City '{city}' not found")
-        
+
         lat = geo_data["results"][0]["latitude"]
         lon = geo_data["results"][0]["longitude"]
-        
-        # Step 2: Get weather forecast
+
         weather_url = "https://api.open-meteo.com/v1/forecast"
         weather_resp = requests.get(
             weather_url,
@@ -273,22 +351,20 @@ def get_weather(city: str, target_date: date) -> dict:
             timeout=5
         )
         weather_data = weather_resp.json()
-        
+
         daily = weather_data.get("daily", {})
         if not daily or "time" not in daily:
             raise ValueError("Invalid weather response")
-        
+
         idx = daily["time"].index(target_date.isoformat())
         temp_max = daily["temperature_2m_max"][idx]
         temp_min = daily["temperature_2m_min"][idx]
         weather_codes = daily.get("weathercode") or daily.get("weather_code") or []
         weather_code = weather_codes[idx] if idx < len(weather_codes) else None
         weather_condition = _weather_condition_from_code(weather_code)
-        
-        # Representative temperature (weighted toward cooler for outfit planning)
+
         temp = temp_min * 0.7 + temp_max * 0.3
-        
-        # Determine clothing season based on actual temperature
+
         if temp < 5:
             season = "winter"
         elif temp < 12:
@@ -297,7 +373,7 @@ def get_weather(city: str, target_date: date) -> dict:
             season = "spring"
         else:
             season = "summer"
-        
+
         return {
             "temperature": round(temp, 1),
             "temp_min": temp_min,
@@ -306,12 +382,11 @@ def get_weather(city: str, target_date: date) -> dict:
             "city": city,
             "condition": weather_condition,
         }
-    
+
     except Exception as e:
-        # Fallback: use calendar month for Northern Hemisphere
         print(f"Weather API failed: {e}. Using calendar-based fallback.")
         month = target_date.month
-        
+
         if month in [12, 1, 2]:
             season, temp = "winter", 0
         elif month in [3, 4, 5]:
@@ -320,7 +395,7 @@ def get_weather(city: str, target_date: date) -> dict:
             season, temp = "summer", 22
         else:
             season, temp = "fall", 10
-        
+
         return {
             "temperature": temp,
             "temp_min": temp - 5,
@@ -332,289 +407,177 @@ def get_weather(city: str, target_date: date) -> dict:
 
 
 # ---- rule-based outfit suggestions ----
+
 def _fits_season(item, season: Optional[str]) -> bool:
     item_season = getattr(item, "season", None)
-
-    # if user didn't filter, or explicitly chose "all season", don't limit by season
     if not season or season in ("any", "all_season") or item_season is None:
         return True
-
-    # direct match
     if item_season == season:
         return True
-
-    # all_season always matches
     if item_season == "all_season":
         return True
-
-    # handle combos like fall_winter, spring_summer
     if "_" in item_season:
         s1, s2 = item_season.split("_")
         return season in (s1, s2)
-
     return False
-
-
 
 
 def _fits_formality(item, desired: Optional[str]) -> bool:
     item_form = getattr(item, "formality", None)
-
-    # if user didn't filter, everything is allowed
     if not desired or desired == "any":
         return True
-
-    # if item has no formality yet, don't block it completely
     if item_form is None:
         return True
-
     r_item = _formality_rank(item_form)
     r_desired = _formality_rank(desired)
-
-    # allow items within 1 step of the requested level
-    # e.g. casual with smart_casual, smart_casual with polished
     return abs(r_item - r_desired) <= 1
-
 
 
 def _color_key(c: Optional[str]) -> str:
     return (c or "").lower().strip()
 
 
-# Color name to approximate hex mapping
 COLOR_HEX_MAP = {
-    "black": "#000000",
-    "white": "#ffffff",
-    "gray": "#808080",
-    "grey": "#808080",
-    "navy": "#000080",
-    "blue": "#0000ff",
-    "light blue": "#87ceeb",
-    "dark blue": "#00008b",
-    "red": "#ff0000",
-    "dark red": "#8b0000",
-    "burgundy": "#800020",
-    "green": "#008000",
-    "dark green": "#006400",
-    "olive": "#808000",
-    "yellow": "#ffff00",
-    "orange": "#ffa500",
-    "brown": "#a52a2a",
-    "beige": "#f5f5dc",
-    "tan": "#d2b48c",
-    "cream": "#fffdd0",
-    "pink": "#ffc0cb",
-    "purple": "#800080",
-    "lavender": "#e6e6fa",
-    "maroon": "#800000",
-    "teal": "#008080",
-    "khaki": "#f0e68c",
-    "ivory": "#fffff0",
-    "gold": "#ffd700",
-    "silver": "#c0c0c0",
-    "multicolor": "#808080",  # treat as neutral
+    "black": "#000000", "white": "#ffffff", "gray": "#808080", "grey": "#808080",
+    "navy": "#000080", "blue": "#0000ff", "light blue": "#87ceeb", "dark blue": "#00008b",
+    "red": "#ff0000", "dark red": "#8b0000", "burgundy": "#800020", "green": "#008000",
+    "dark green": "#006400", "olive": "#808000", "yellow": "#ffff00", "orange": "#ffa500",
+    "brown": "#a52a2a", "beige": "#f5f5dc", "tan": "#d2b48c", "cream": "#fffdd0",
+    "pink": "#ffc0cb", "purple": "#800080", "lavender": "#e6e6fa", "maroon": "#800000",
+    "teal": "#008080", "khaki": "#f0e68c", "ivory": "#fffff0", "gold": "#ffd700",
+    "silver": "#c0c0c0", "multicolor": "#808080",
 }
 
 
 def hex_to_hsl(hex_color: str):
-    """Convert #rrggbb to (h, s, l). h in [0,360), s,l in [0,1]."""
     hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2], 16) / 255.0
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
-
     c_max = max(r, g, b)
     c_min = min(r, g, b)
     delta = c_max - c_min
-
     l = (c_max + c_min) / 2.0
-
     if delta == 0:
         return 0.0, 0.0, l
-
     s = delta / (1 - abs(2 * l - 1))
-
     if c_max == r:
         h = 60 * (((g - b) / delta) % 6)
     elif c_max == g:
         h = 60 * (((b - r) / delta) + 2)
     else:
         h = 60 * (((r - g) / delta) + 4)
-
     return h, s, l
 
 
 def hue_distance(h1: float, h2: float) -> float:
-    """Smallest distance between two hues on color wheel."""
     d = abs(h1 - h2)
     return min(d, 360 - d)
 
 
 def is_neutral_fallback(h: float, s: float, l: float) -> bool:
-    """Fallback HSL-based neutral check."""
-    # very low saturation (grey/white/black)
     if s < 0.18:
         return True
-    # navy-like dark blue
     if 200 <= h <= 260 and l < 0.35 and s < 0.6:
         return True
-    # fallback warm earth tones
     if 10 <= h <= 70 and s < 0.65 and 0.2 <= l <= 0.9:
         return True
     return False
 
 
 def score_outfit_colors(color_names: list[str]) -> float:
-    """
-    Score color harmony for outfit pieces.
-    
-    Args:
-        color_names: List of 2-4 color names (e.g., ["black", "white", "navy"])
-    
-    Returns:
-        Score from 0-10 (higher = better color harmony)
-    """
-    # Filter out None values
     colors = [c for c in color_names if c]
     if len(colors) < 2:
-        return 5.0  # neutral score if not enough colors
-    
-    # Convert color names to hex
+        return 5.0
     hex_colors = []
     for color_name in colors:
         key = _color_key(color_name)
-        hex_val = COLOR_HEX_MAP.get(key, "#808080")  # default to gray
+        hex_val = COLOR_HEX_MAP.get(key, "#808080")
         hex_colors.append(hex_val)
-    
-    # Convert to HSL
     hsl_colors = [hex_to_hsl(c) for c in hex_colors]
-    
     neutrals = 0
     brights = 0
     has_light = False
     has_dark = False
     hues = []
-    
-    # Track specific neutral types for bonuses
     has_navy = False
     has_white = False
-    earth_tones = 0  # beige, tan, brown, khaki
-    
+    earth_tones = 0
+
     for i, (h, s, l) in enumerate(hsl_colors):
         color_name = _color_key(colors[i])
-        
-        # 1️⃣ NAME-BASED neutrals first (fixes beige/tan/navy/brown)
         if color_name in (
             "black","white","grey","gray","navy","brown",
             "beige","tan","khaki","cream","ivory",
             "olive","silver","multicolor"
         ):
             neutrals += 1
-        # fallback HSL neutral
         elif is_neutral_fallback(h, s, l):
             neutrals += 1
-        
-        # 2️⃣ BRIGHTS — EXCLUDE earth tones + navy from bright counting
         if (
             s > 0.65 and 0.25 < l < 0.8
             and color_name not in ("khaki","beige","tan","brown","olive","navy")
         ):
             brights += 1
-        
         if l > 0.7:
             has_light = True
         if l < 0.3:
             has_dark = True
         hues.append(h)
-        
-        # Track specific colors for bonuses
         if color_name == "navy":
             has_navy = True
         if color_name in ("white", "cream", "ivory"):
             has_white = True
         if color_name in ("beige", "tan", "brown", "khaki", "olive"):
             earth_tones += 1
-    
+
     score = 0.0
     n = len(colors)
-    
-    # 1) Neutrals: reward outfits with neutral anchors
     if n <= 3:
         if neutrals >= 2:
             score += 3
         elif neutrals == 1:
             score += 2
-    else:  # 4 pieces
+    else:
         if neutrals >= 3:
-            score += 4  # Bonus for 3+ neutrals in 4-piece outfit
+            score += 4
         elif neutrals == 2:
             score += 3
         elif neutrals == 1:
             score += 1
-    
-    # 2) Bright colors: penalize too many loud colors
     if brights <= 1:
         score += 3
     elif brights == 2:
         score += 1
-    # else +0 (too many brights)
-    
-    # 3) Light/dark contrast: reward depth
     if has_light and has_dark:
         score += 2
-    
-    # 4) Hue harmony on color wheel
     complementary = False
     analogous = False
     for i in range(len(hues)):
         for j in range(i + 1, len(hues)):
             d = hue_distance(hues[i], hues[j])
-            if d <= 30:          # analogous (similar colors)
+            if d <= 30:
                 analogous = True
-            if 150 <= d <= 210:  # complementary (opposite colors)
+            if 150 <= d <= 210:
                 complementary = True
-    
     if analogous:
         score += 1
     if complementary:
         score += 1
-    
-    # 5) Bonus for all-neutral earth tone outfits (beige, tan, brown, khaki)
     if earth_tones >= 2 and neutrals >= 2:
-        score += 1.5  # Warm earth tones bonus
-    
-    # 6) Bonus for classic business formal (navy + white + dark neutrals)
+        score += 1.5
     if has_navy and has_white and neutrals >= 2:
-        score += 1  # Business formal bonus
-    
+        score += 1
     return round(min(score, 10.0), 1)
 
 
 def _get_color_score(top_color, bottom_color, outer_color=None, shoes_color=None) -> float:
-    """
-    Get color harmony score for outfit pieces.
-    
-    Args:
-        top_color: Color of the top (required)
-        bottom_color: Color of the bottom (required)
-        outer_color: Color of outer layer (optional)
-        shoes_color: Color of shoes (optional)
-    
-    Returns:
-        Score from 0-10 (higher = better color harmony)
-    """
     colors = [top_color, bottom_color, outer_color, shoes_color]
     return score_outfit_colors(colors)
 
 
 def _compatible(top, bottom, outer=None, shoes=None) -> bool:
-    """
-    Reject combos where any two pieces are 2+ formality levels apart.
-    1 level apart is fine (e.g. casual + smart_casual, smart_casual + polished).
-    """
     pieces = [p for p in (top, bottom, outer, shoes) if p is not None]
-    ranks = [_formality_rank(getattr(p, "formality", None)) for p in pieces]
-    # filter out untagged (rank 0 from missing value) only if formality is truly None
     ranked_pieces = [
         _formality_rank(getattr(p, "formality", None))
         for p in pieces
@@ -626,68 +589,45 @@ def _compatible(top, bottom, outer=None, shoes=None) -> bool:
 
 
 def _season_penalty(item, season: Optional[str]) -> float:
-    """
-    Return a penalty for how far the item's season is from the
-    desired season.  0 = perfect match, 1 level off = -1, 2 levels off = -2.
-    """
     if not season or season in ("any", "all_season"):
         return 0.0
     item_season = getattr(item, "season", None)
     if item_season is None or item_season == "all_season":
-        return 0.0          # untagged / all-season → no penalty
+        return 0.0
     if item_season == season:
-        return 0.0          # exact match
-
-    # combo seasons like "fall_winter" — partial match
+        return 0.0
     if "_" in item_season:
         parts = item_season.split("_")
         if season in parts:
-            return 0.0      # season is one of the parts → exact
-        return 1.0          # season not in combo → 1 level penalty
-
-    # adjacent seasons get a smaller penalty than opposite ones
+            return 0.0
+        return 1.0
     ORDER = ["spring", "summer", "fall", "winter"]
     try:
         idx_item = ORDER.index(item_season)
         idx_want = ORDER.index(season)
     except ValueError:
-        return 1.0          # unknown value → 1 level penalty
+        return 1.0
     dist = min(abs(idx_item - idx_want), 4 - abs(idx_item - idx_want))
-    # dist 1 → -1,  dist 2 → -2
     return float(dist)
 
 
 def _formality_penalty(item, formality: Optional[str]) -> float:
-    """
-    Return a penalty for how far the item's formality is from
-    the desired level.  0 = perfect match, 1 level off = -1, 2 levels off = -2.
-    """
     if not formality or formality == "any":
         return 0.0
     item_form = getattr(item, "formality", None)
     if item_form is None:
-        return 0.0          # untagged → no penalty
+        return 0.0
     r_item = _formality_rank(item_form)
     r_want = _formality_rank(formality)
     dist = abs(r_item - r_want)
-    # dist 0 → 0, dist 1 → 1, dist 2 → 2, dist 3 → 3
     return float(dist)
 
 
 def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = True) -> float:
-    """
-    Score an outfit using the ML color model, then subtract penalties for
-    items that don't match the user-chosen season / formality.
-
-    Returns:
-        Final score (can go below 0). Higher = better.
-    """
     top_color  = getattr(top,    "primary_color",     None) if top    else None
     bottom_color = getattr(bottom, "primary_color",   None) if bottom else None
     outer_color  = getattr(outer,  "primary_color",   None) if outer  else None
     shoes_color  = getattr(shoes,  "primary_color",   None) if shoes  else None
-
-    # Include secondary colors in the color list for scoring
     top_sec    = getattr(top,    "secondary_color", None) if top    else None
     bottom_sec = getattr(bottom, "secondary_color", None) if bottom else None
     outer_sec  = getattr(outer,  "secondary_color", None) if outer  else None
@@ -696,15 +636,11 @@ def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = 
         top_color, bottom_color, outer_color, shoes_color,
         top_sec, bottom_sec, outer_sec, shoes_sec,
     ] if c]
-
     top_hsv    = getattr(top,    "primary_color_hsv", None) if top    else None
     bottom_hsv = getattr(bottom, "primary_color_hsv", None) if bottom else None
     outer_hsv  = getattr(outer,  "primary_color_hsv", None) if outer  else None
     shoes_hsv  = getattr(shoes,  "primary_color_hsv", None) if shoes  else None
-
-    # ML model only needs top + bottom HSV at minimum
     can_use_model = (top_hsv is not None and bottom_hsv is not None)
-
     if can_use_model:
         color_score = score_outfit_ml(
             colors=all_colors,
@@ -715,15 +651,11 @@ def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = 
         if verbose:
             print(f"⚠️  Missing HSV (top={top_hsv}, bottom={bottom_hsv}) → rule-based fallback")
         color_score = score_outfit_colors(all_colors)
-
-    # ── Formality penalties ──────────────────────────
     penalty = 0.0
     for piece in (top, bottom, outer, shoes):
         if piece is None:
             continue
         penalty += _formality_penalty(piece, formality)
-
-    # Intra-outfit consistency penalty
     piece_ranks = [
         _formality_rank(getattr(p, "formality", None))
         for p in (top, bottom, outer, shoes)
@@ -732,19 +664,14 @@ def _score_outfit(top, bottom, outer, shoes, season, formality, verbose: bool = 
     if len(piece_ranks) >= 2:
         spread = max(piece_ranks) - min(piece_ranks)
         penalty += spread * 0.5
-
     final = color_score - penalty
-
     if verbose and penalty > 0:
         print(f"   🔻 Season/formality penalty: −{penalty:.1f}  "
               f"(color {color_score:.1f} → final {final:.1f})")
-
     return final
 
 
-
 def _outfit_color_fingerprint(outfit: dict) -> str:
-    """Return a stable string fingerprint of the primary colours in an outfit."""
     colors = sorted(
         c for c in (
             getattr(outfit.get("top"),    "primary_color", None),
@@ -762,10 +689,6 @@ def _pick_outfit_legacy(
     season, formality,
     liked_fps: set = None,
 ):
-    """
-    LEGACY outfit picking logic.
-    Returns the best outfit dict {top, bottom, outer, shoes}.
-    """
     import itertools, time
 
     def _want_outer() -> bool:
@@ -783,20 +706,17 @@ def _pick_outfit_legacy(
     outer_pool = outers if _want_outer() else [None]
     shoe_pool  = shoes or [None]
 
-    # ── Build candidate lists per slot (anchor overrides pool) ──
     t_list = [t] if t else tops
     b_list = [b] if b else bottoms
     o_list = [o] if o else outer_pool
     s_list = [s] if s else shoe_pool
 
     if not t_list or not b_list:
-        # extreme fallback
         return {"top": t or (tops[0] if tops else None),
                 "bottom": b or (bottoms[0] if bottoms else None),
                 "outer": o or (outers[0] if outers and _want_outer() else None),
                 "shoes": s or (shoes[0] if shoes else None)}
 
-    # ── Score all combos (with a cap to stay fast) ──
     MAX_COMBOS = 200
     combos = list(itertools.product(t_list, b_list, o_list, s_list))
     if len(combos) > MAX_COMBOS:
@@ -805,30 +725,25 @@ def _pick_outfit_legacy(
 
     start = time.perf_counter()
 
-    # ── Pre-extract features + build batch for ONE model.predict() call ──
     compatible_combos = []
     feature_rows = []
-    fallback_indices = []  # indices that need rule-based scoring
+    fallback_indices = []
 
     for tc, bc, oc, sc in combos:
         if not _compatible(tc, bc, oc, sc):
             continue
-
         top_hsv    = getattr(tc, "primary_color_hsv", None) if tc else None
         bottom_hsv = getattr(bc, "primary_color_hsv", None) if bc else None
         outer_hsv  = getattr(oc, "primary_color_hsv", None) if oc else None
         shoes_hsv  = getattr(sc, "primary_color_hsv", None) if sc else None
-
         hsvs = [top_hsv, bottom_hsv, outer_hsv, shoes_hsv]
         compatible_combos.append((tc, bc, oc, sc, hsvs))
-
         if top_hsv is not None and bottom_hsv is not None:
             feature_rows.append(extract_features(hsvs))
         else:
             feature_rows.append(None)
             fallback_indices.append(len(compatible_combos) - 1)
 
-    # Batch ML prediction — single call for all combos
     ml_indices = [i for i, f in enumerate(feature_rows) if f is not None]
     ml_scores = {}
     if ml_indices and trained_model is not None:
@@ -840,13 +755,11 @@ def _pick_outfit_legacy(
         for idx, raw_score in zip(ml_indices, preds):
             ml_scores[idx] = round(max(0.0, min(float(raw_score), 10.0)), 1)
 
-    # Assemble scored list
     scored = []
     for i, (tc, bc, oc, sc, hsvs) in enumerate(compatible_combos):
         if i in ml_scores:
             color_score = ml_scores[i]
         else:
-            # rule-based fallback
             cs = [c for c in [
                   getattr(tc, "primary_color",   None) if tc else None,
                   getattr(bc, "primary_color",   None) if bc else None,
@@ -859,15 +772,12 @@ def _pick_outfit_legacy(
               ] if c]
             color_score = score_outfit_colors(cs)
 
-        # Apply formality penalties
         penalty = 0.0
         for piece in (tc, bc, oc, sc):
             if piece is None:
                 continue
             penalty += _formality_penalty(piece, formality)
 
-        # Intra-outfit consistency penalty: penalise spread between pieces
-        # regardless of requested formality (catches casual+smart_casual when formality=any)
         piece_ranks = [
             _formality_rank(getattr(p, "formality", None))
             for p in (tc, bc, oc, sc)
@@ -875,10 +785,8 @@ def _pick_outfit_legacy(
         ]
         if len(piece_ranks) >= 2:
             spread = max(piece_ranks) - min(piece_ranks)
-            # spread=1 (e.g. casual+smart_casual) → -0.5,  spread=2 → -1.0 (rarely passes _compatible)
             penalty += spread * 0.5
 
-        # Penalise outfits whose colour combo the user has already liked/disliked (avoid repetition)
         fp = _outfit_color_fingerprint({"top": tc, "bottom": bc, "outer": oc, "shoes": sc})
         fp_penalized = liked_fps is not None and fp in liked_fps
         if fp_penalized:
@@ -897,13 +805,7 @@ def _pick_outfit_legacy(
     if not scored:
         return []
 
-    # ── Diverse top-3 selection ──────────────────────────────────────────
-    # Slot 1: always the best.
-    # Slot 2: pick best with a different color fingerprint, unless it scores
-    #         more than 1.5 below the natural next-best (then take natural).
-    # Slot 3: same rule but tolerance is 2.0.
     DIVERSITY_THRESHOLDS = (1.5, 2.0)
-
     picked = [scored[0]]
     picked_ids = {id(scored[0])}
 
@@ -922,7 +824,6 @@ def _pick_outfit_legacy(
 
     picked_set = set(id(e) for e in picked)
 
-    # ── Print full ranked table ───────────────────────────────────────────
     print(f"\n⚡ Evaluated {len(scored)} compatible combos in {elapsed:.2f}s")
     if liked_fps:
         print(f"🚫 Avoided fingerprints ({len(liked_fps)}):")
@@ -931,12 +832,14 @@ def _pick_outfit_legacy(
     print(f"\n{'─'*120}")
     print(f"{'Rank':>4}  {'Score':>6}  {'Top':<22} {'Bottom':<22} {'Outer':<22} {'Shoes':<22} {'Fingerprint'}")
     print(f"{'─'*120}")
+
     def _fmt(piece):
         if not piece:
             return "-"
         cat = getattr(piece, "category", None) or getattr(piece, "outfit_part", "?")
         form = getattr(piece, "formality", "?") or "?"
         return f"{cat}({form})"
+
     for i, entry in enumerate(scored, 1):
         o = entry["outfit"]
         marker = " ◀ PICKED" if id(entry) in picked_set else ""
@@ -967,9 +870,7 @@ def _pick_outfit_legacy(
     return picked
 
 
-
 def _parse_id_list(raw: Optional[str]) -> set[int]:
-    """Parse a comma-separated list of IDs from the query string into a set of ints."""
     if not raw:
         return set()
     out: set[int] = set()
@@ -1014,7 +915,6 @@ def _save_outfit_history(
     bottom = outfit.get("bottom")
     outer = outfit.get("outer")
     shoes = outfit.get("shoes")
-
     history = OutfitHistory(
         user_id=user_id,
         requested_date=requested_date,
@@ -1041,20 +941,23 @@ def _save_outfit_history(
 @app.get("/users/{user_id}/outfits/suggest")
 def suggest_outfit(
     user_id: int,
-    outfit_date: Optional[str] = None,  # date for the outfit (e.g. "2025-11-22")
-    formality: Optional[str] = None,    # "casual","smart_casual","semi_formal","formal","any"
-    anchor_ids: Optional[str] = None,   # e.g. "12,15" -> items we MUST try to include
-    exclude_ids: Optional[str] = None,  # e.g. "3,4"  -> items we MUST NOT use
+    outfit_date: Optional[str] = None,
+    formality: Optional[str] = None,
+    anchor_ids: Optional[str] = None,
+    exclude_ids: Optional[str] = None,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
+
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
-    
+
     if not user.city:
         raise HTTPException(400, "User has no city set. Cannot determine weather.")
-    
-    # Parse date or use today
+
     if outfit_date:
         try:
             target_date = datetime.strptime(outfit_date, "%Y-%m-%d").date()
@@ -1062,31 +965,24 @@ def suggest_outfit(
             raise HTTPException(400, f"Invalid date format: {outfit_date}. Use YYYY-MM-DD")
     else:
         target_date = date.today()
-    
-    # Get weather and determine season from actual temperature
+
     weather = get_weather(user.city, target_date)
     season = weather["season"]
-    
+
     print(f"📍 {weather['city']} on {target_date}")
     print(f"🌡️  Temperature: {weather['temperature']}°C (range: {weather['temp_min']}-{weather['temp_max']}°C)")
     print(f"🍂 Clothing season: {season}")
 
     all_items = crud.list_items_for_user(session, user_id)
-
-    # 1) apply exclude list up front
     exclude_set = _parse_id_list(exclude_ids)
     items = [i for i in all_items if i.id not in exclude_set]
-
-    # 2) figure out which remaining items are anchored / must-wear
     anchor_set = _parse_id_list(anchor_ids)
     anchor_items = [i for i in items if i.id in anchor_set]
-
     anchor_top = next((i for i in anchor_items if i.outfit_part == "top"), None)
     anchor_bottom = next((i for i in anchor_items if i.outfit_part == "bottom"), None)
     anchor_outer = next((i for i in anchor_items if i.outfit_part == "outerwear"), None)
     anchor_shoes = next((i for i in anchor_items if i.outfit_part == "shoes"), None)
 
-    # 3) build filtered pools for everything else (anchors bypass filters)
     def _pool(part: str):
         return [
             i for i in items
@@ -1101,34 +997,23 @@ def suggest_outfit(
     outers = _pool("outerwear")
     shoes = _pool("shoes")
 
-    # Debug logging
     print(f"🔍 Filtered pools for formality='{formality}', season='{season}':")
     print(f"   Tops: {len(tops)} items")
     print(f"   Bottoms: {len(bottoms)} items")
     print(f"   Outers: {len(outers)} items")
     print(f"   Shoes: {len(shoes)} items")
-    
-    # Log what got filtered out
+
     for item in all_items:
         if item.outfit_part == "top" and item not in tops and item.id not in anchor_set and item.id not in exclude_set:
             print(f"   ❌ Top filtered: {item.category} (season={item.season}, formality={item.formality})")
         if item.outfit_part == "bottom" and item not in bottoms and item.id not in anchor_set and item.id not in exclude_set:
             print(f"   ❌ Bottom filtered: {item.category} (season={item.season}, formality={item.formality})")
 
-    # add a bit of randomness so repeated "Generate" clicks can explore
-    # different valid combinations instead of always picking the same first match
     random.shuffle(tops)
     random.shuffle(bottoms)
     random.shuffle(outers)
     random.shuffle(shoes)
 
-    # ============================================================
-    # NEW OUTFIT SELECTION LOGIC (TODO: implement new algorithm)
-    # ============================================================
-    # TODO: Implement new outfit selection logic here
-    # For now, using legacy algorithm as placeholder
-    
-    # Load liked and disliked fingerprints — both are penalised to avoid repetition
     liked_fps = set(
         row.color_fingerprint
         for row in session.exec(
@@ -1216,6 +1101,7 @@ def suggest_outfit(
 
 from pydantic import BaseModel as _PydanticBase
 
+
 class LikeComboPayload(_PydanticBase):
     color_fingerprint: str
 
@@ -1225,12 +1111,13 @@ def like_combo(
     user_id: int,
     payload: LikeComboPayload,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    """Save a liked colour combination for a user."""
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
-    # avoid duplicates
     existing = session.exec(
         select(LikedOutfit).where(
             LikedOutfit.user_id == user_id,
@@ -1246,7 +1133,13 @@ def like_combo(
 
 
 @app.get("/users/{user_id}/disliked-combos")
-def list_disliked_combos(user_id: int, session: Session = Depends(get_session)):
+def list_disliked_combos(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
@@ -1259,11 +1152,13 @@ def dislike_combo(
     user_id: int,
     payload: LikeComboPayload,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
-    # remove from liked if it was there
     liked = session.exec(select(LikedOutfit).where(
         LikedOutfit.user_id == user_id,
         LikedOutfit.color_fingerprint == payload.color_fingerprint,
@@ -1289,7 +1184,10 @@ def undislike_combo(
     user_id: int,
     payload: LikeComboPayload,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
@@ -1308,8 +1206,10 @@ def unlike_combo(
     user_id: int,
     payload: LikeComboPayload,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    """Remove a liked colour combination (un-like)."""
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
@@ -1326,18 +1226,22 @@ def unlike_combo(
 
 
 @app.get("/users/{user_id}/wardrobe/recommendations")
-def get_wardrobe_recommendations(user_id: int, session: Session = Depends(get_session)):
+def get_wardrobe_recommendations(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
-
     recommendations = compute_gap_recommendations(session=session, user_id=user_id, limit=6)
     return {"recommendations": recommendations}
 
 
-
-
 # ---- debug ----
+
 @app.get("/debug/env")
 def debug_env():
     return {
@@ -1347,7 +1251,9 @@ def debug_env():
 
 
 # ---- Style Lab: score an arbitrary outfit ----
+
 from pydantic import BaseModel as PydanticBaseModel
+
 
 class ScoreRequest(PydanticBaseModel):
     top_id: Optional[int] = None
@@ -1361,17 +1267,15 @@ def score_outfit_endpoint(
     user_id: int,
     payload: ScoreRequest,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Score an arbitrary combination of wardrobe items using the ML color model.
-    Returns the score, extracted features, and human-readable explanations
-    of what's helping or hurting the outfit.
-    """
+    if current_user.id != user_id:
+        raise HTTPException(403, "Access denied")
+
     user = crud.get_user(session, user_id)
     if not user:
         raise HTTPException(404, "User not found")
 
-    # Fetch items
     def _get(item_id):
         if not item_id:
             return None
@@ -1388,7 +1292,6 @@ def score_outfit_endpoint(
     if not top and not bottom:
         raise HTTPException(400, "Pick at least a top or bottom")
 
-    # Gather color info
     colors = [
         getattr(top,    "primary_color",     None) if top    else None,
         getattr(bottom, "primary_color",     None) if bottom else None,
@@ -1418,13 +1321,11 @@ def score_outfit_endpoint(
     ]
     feat_dict = dict(zip(feat_names, features))
 
-    # ── Build human-readable explanations ──────────────────────
     explanations = []
 
     SLOT_NAMES = ["top", "bottom", "outerwear", "shoes"]
     pieces = [top, bottom, outer, shoes]
 
-    # ── 1. Formality mismatch ──────────────────────────────────
     formalities = {}
     for i, piece in enumerate(pieces):
         if piece:
@@ -1450,7 +1351,6 @@ def score_outfit_endpoint(
                 "message": f"Slight style gap — {lo_slot} is {formalities[lo_slot]}, {hi_slot} is {formalities[hi_slot]}. It can work but it's a stretch.",
             })
 
-    # ── 2. Season mismatch ─────────────────────────────────────
     seasons = {}
     for i, piece in enumerate(pieces):
         if piece:
@@ -1460,7 +1360,6 @@ def score_outfit_endpoint(
 
     unique_seasons = set(seasons.values())
     if len(unique_seasons) > 1:
-        # check if any two are opposite (summer+winter, spring+fall)
         OPPOSITES = {("summer", "winter"), ("winter", "summer"), ("spring", "fall"), ("fall", "spring")}
         season_list = list(seasons.items())
         for a in range(len(season_list)):
@@ -1477,7 +1376,6 @@ def score_outfit_endpoint(
                 continue
             break
 
-    # ── 3. Color clash (worst pair) ────────────────────────────
     parsed = []
     for hsv_str in hsvs:
         if hsv_str:
@@ -1489,7 +1387,6 @@ def score_outfit_endpoint(
         else:
             parsed.append(None)
 
-    # Count how many bright (non-neutral) pieces exist
     bright_pieces = sum(1 for p in parsed if p and p[1] >= 20)
     neutral_c = int(feat_dict["neutral_count"])
 
@@ -1498,7 +1395,6 @@ def score_outfit_endpoint(
     for i in range(4):
         for j in range(i + 1, 4):
             if parsed[i] and parsed[j]:
-                # only measure between two non-neutral pieces
                 if parsed[i][1] >= 20 and parsed[j][1] >= 20:
                     d = hue_distance(parsed[i][0], parsed[j][0])
                     if d > worst_dist:
@@ -1509,32 +1405,25 @@ def score_outfit_endpoint(
         ci, cj = worst_pair
         c1 = colors[ci] or SLOT_NAMES[ci]
         c2 = colors[cj] or SLOT_NAMES[cj]
-
-        # With neutrals grounding the outfit, only flag truly opposite colors
-        # Without neutrals, lower the threshold — nothing to balance them
         if neutral_c >= 1 and worst_dist > 150:
-            # Even with neutrals, straight-up opposite colors still clash
             explanations.append({
                 "type": "clash",
                 "icon": "⚠️",
                 "message": f"{c1} and {c2} clash — {worst_dist:.0f}° apart, even your neutrals can't save that combo.",
             })
         elif neutral_c == 0 and worst_dist > 100:
-            # No neutrals to anchor = clashing hits harder
             explanations.append({
                 "type": "clash",
                 "icon": "⚠️",
                 "message": f"{c1} and {c2} are {worst_dist:.0f}° apart with no neutrals to balance them out.",
             })
         elif neutral_c == 0 and bright_pieces >= 3 and worst_dist > 60:
-            # 3+ brights with no anchor and moderate distance = messy
             explanations.append({
                 "type": "clash",
                 "icon": "⚠️",
                 "message": f"Too many colors without a neutral anchor — {c1} and {c2} add to the chaos.",
             })
 
-    # ── 4. Too many brights ────────────────────────────────────
     high_sat = int(feat_dict["high_sat_count"])
     if high_sat >= 3:
         explanations.append({
@@ -1549,7 +1438,6 @@ def score_outfit_endpoint(
             "message": "2 bright pieces — on the edge of being too busy.",
         })
 
-    # ── 5. Too many neutrals (boring) ──────────────────────────
     neutral_c = int(feat_dict["neutral_count"])
     total_pieces = sum(1 for p in pieces if p is not None)
     if neutral_c == total_pieces and total_pieces >= 2:
@@ -1565,7 +1453,6 @@ def score_outfit_endpoint(
             "message": "Mostly neutrals — plays it very safe. A pop of color could help.",
         })
 
-    # If nothing is wrong, say so
     if not explanations:
         explanations.append({
             "type": "good",
@@ -1573,7 +1460,6 @@ def score_outfit_endpoint(
             "message": "Colors, style, and balance all look good.",
         })
 
-    # --- Overall verdict ---
     if score >= 8.0:
         verdict = {"label": "Excellent", "emoji": "🔥", "color": "green"}
     elif score >= 6.5:

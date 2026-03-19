@@ -8,13 +8,53 @@ export const API = axios.create({
   baseURL,
 });
 
+// Attach token to every request
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("cp:token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, clear auth state and redirect to login
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem("cp:token");
+      localStorage.removeItem("cp:user");
+      if (window.location.pathname !== "/login" && window.location.pathname !== "/signup") {
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// AUTH
+export async function signup(payload) {
+  const { data } = await API.post("/auth/signup", payload);
+  return data; // { token, user }
+}
+
+export async function login(payload) {
+  const { data } = await API.post("/auth/login", payload);
+  return data; // { token, user }
+}
+
+export async function getMe() {
+  const { data } = await API.get("/users/me");
+  return data;
+}
+
 // USERS
 export async function createUser(payload) {
-  // Accept either a name string (backwards compat) or a full payload object
   const body = typeof payload === "string" ? { name: payload } : payload || {};
   const { data } = await API.post("/users", body);
   return data;
 }
+
 export async function listUsers() {
   const { data } = await API.get("/users");
   return data;
@@ -45,8 +85,6 @@ export async function uploadUserItem(userId, { file, name, allowDuplicate = fals
   return data;
 }
 
-
-
 // ITEM OPS
 export async function classifyItem(itemId) {
   const { data } = await API.post(`/items/${itemId}/classify`);
@@ -71,9 +109,6 @@ export async function scoreOutfit(userId, payload) {
   return data;
 }
 
-
-
-// Build a usable <img src> from whatever the backend returns.
 // LIKED COLOUR COMBOS
 export async function likeCombo(userId, colorFingerprint) {
   const { data } = await API.post(`/users/${userId}/liked-combos`, { color_fingerprint: colorFingerprint });
@@ -107,9 +142,8 @@ export function imageSrc(it) {
 
   if (!raw) return null;
 
-  if (/^https?:\/\//i.test(raw)) return raw;            // already full URL
-  if (raw.startsWith("/")) return API.defaults.baseURL + raw; // "/storage/abc.jpg"
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return API.defaults.baseURL + raw;
 
-  // common case: backend returns just "abc.jpg" stored under /storage
   return `${API.defaults.baseURL}/storage/${raw}`;
 }

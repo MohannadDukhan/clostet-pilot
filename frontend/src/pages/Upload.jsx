@@ -19,7 +19,7 @@ export default function Upload() {
 
   const user = getUser();
   if (!user) {
-    navigate("/create-user", { replace: true });
+    navigate("/login", { replace: true });
     return null;
   }
 

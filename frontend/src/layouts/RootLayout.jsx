@@ -6,10 +6,12 @@ import { useState, useEffect } from "react";
 export default function RootLayout() {
   const location = useLocation();
   const [user, setUser] = useState(null);
+
   useEffect(() => {
     try {
+      const token = localStorage.getItem("cp:token");
       const raw = localStorage.getItem("cp:user");
-      if (raw) {
+      if (token && raw) {
         setUser(JSON.parse(raw));
       }
     } catch {
@@ -17,9 +19,13 @@ export default function RootLayout() {
     }
   }, []);
 
+  function handleSetUser(u) {
+    setUser(u);
+  }
+
   return (
     <div className="min-h-dvh bg-gradient-to-b from-bg to-surface text-text">
-      <Navbar user={user} setUser={setUser} />
+      <Navbar user={user} setUser={handleSetUser} />
       <AnimatePresence mode="wait">
         <motion.main
           key={location.pathname}
@@ -29,7 +35,7 @@ export default function RootLayout() {
           transition={{ duration: 0.25 }}
           className="py-10"
         >
-          <Outlet context={{ setUser }} />
+          <Outlet context={{ user, setUser: handleSetUser }} />
         </motion.main>
       </AnimatePresence>
       <footer className="py-10 border-t border-border/60">

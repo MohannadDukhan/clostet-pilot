@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { API, listUsers, listUserItems, suggestOutfit, likeCombo, unlikeCombo, dislikeCombo, undislikeCombo, listDislikedCombos } from "../api";
+import { useNavigate } from "react-router-dom";
+import { API, listUserItems, suggestOutfit, likeCombo, unlikeCombo, dislikeCombo, undislikeCombo, listDislikedCombos } from "../api";
 
-// helper to resolve image URLs whether absolute or served from /storage
 function imageSrc(item) {
   const url = item?.image_url || "";
   if (!url) return "";
@@ -18,11 +18,19 @@ const FORMALITY = [
   { value: "polished", label: "Polished" },
 ];
 
+function getUser() {
+  try {
+    const raw = localStorage.getItem("cp:user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function GenerateOutfit() {
-  // user state (self-managed)
-  const [users, setUsers] = useState([]);
-  const [userId, setUserId] = useState(null);
+  const navigate = useNavigate();
+  const user = getUser();
+  const userId = user?.id ?? null;
 
   const [items, setItems] = useState([]);
   const [anchorIds, setAnchorIds] = useState([]);
@@ -36,8 +44,6 @@ export default function GenerateOutfit() {
   );
   const hasCorePieces = hasTop && hasBottom;
 
-
-  // Modal state
   const [showModal, setShowModal] = useState(false);
   const [formality, setFormality] = useState("any");
   const [outfitDate, setOutfitDate] = useState("");
@@ -45,46 +51,20 @@ export default function GenerateOutfit() {
   const [suggestion, setSuggestion] = useState(null);
   const [likedCombos, setLikedCombos] = useState(new Set());
   const [dislikedCombos, setDislikedCombos] = useState(new Set());
-  const [savedDislikes, setSavedDislikes] = useState([]); // [{id, color_fingerprint}] — for the management panel
+  const [savedDislikes, setSavedDislikes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [swappingPart, setSwappingPart] = useState(null);
   const [outfitIndex, setOutfitIndex] = useState(0);
 
-
-  // load users on mount and restore last selection if available
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await listUsers();
-        setUsers(list || []);
-        const saved = localStorage.getItem("cp:selectedUserId");
-        if (saved && list.some(u => String(u.id) === String(saved))) {
-          setUserId(Number(saved));
-        } else if (list.length) {
-          setUserId(list[0].id);
-        }
-      } catch (e) {
-        setErr("failed to load users");
-      }
-    })();
+    if (!user) {
+      navigate("/login", { replace: true });
+    }
   }, []);
 
-  // persist selection
   useEffect(() => {
-    if (userId != null) localStorage.setItem("cp:selectedUserId", String(userId));
-  }, [userId]);
-
-  // load wardrobe items whenever the user changes
-  useEffect(() => {
-    if (!userId) {
-      setItems([]);
-      setAnchorIds([]);
-      setExcludeIds([]);
-      setSavedDislikes([]);
-      return;
-    }
-
+    if (!userId) return;
     (async () => {
       try {
         const data = await listUserItems(userId);
@@ -103,7 +83,6 @@ export default function GenerateOutfit() {
     })();
   }, [userId]);
 
-  // Set default date to today
   useEffect(() => {
     if (!outfitDate) {
       const today = new Date().toISOString().split('T')[0];
@@ -111,13 +90,14 @@ export default function GenerateOutfit() {
     }
   }, [outfitDate]);
 
+  if (!user) return null;
+
   function toggleAnchor(id) {
     setAnchorIds((prev) => {
       const exists = prev.includes(id);
       const next = exists ? prev.filter((x) => x !== id) : [...prev, id];
       return next;
     });
-    // if we include it, make sure it's not excluded
     setExcludeIds((prev) => prev.filter((x) => x !== id));
   }
 
@@ -127,83 +107,51 @@ export default function GenerateOutfit() {
       const next = exists ? prev.filter((x) => x !== id) : [...prev, id];
       return next;
     });
-    // excluded items can't also be anchors
     setAnchorIds((prev) => prev.filter((x) => x !== id));
   }
 
   function openGenerateModal() {
-    if (!userId) {
-      setErr("Select a user first");
-      return;
-    }
     setShowModal(true);
     setErr("");
   }
 
   async function handleSwap(part) {
     if (!suggestion || !userId) return;
-
-    // current outfit from the ranked list
     const currentEntry = suggestion.outfits?.[outfitIndex];
     const outfit = currentEntry?.outfit || suggestion.outfit || suggestion;
     const current = outfit[part];
     if (!current) return;
 
-    // anchor the other parts so only this one can change
-    const otherParts = ["top", "bottom", "outer", "shoes"].filter(
-      (p) => p !== part
-    );
+    const otherParts = ["top", "bottom", "outer", "shoes"].filter((p) => p !== part);
+    const anchorFromOutfit = otherParts.map((p) => outfit[p]?.id).filter(Boolean);
+    const anchorParam = Array.from(new Set([...(anchorIds || []), ...anchorFromOutfit]));
+    const excludeParam = Array.from(new Set([...(excludeIds || []), current.id]));
 
-    const anchorFromOutfit = otherParts
-      .map((p) => outfit[p]?.id)
-      .filter(Boolean);
-
-    // combine existing anchors / excludes from the UI with our new ones
-    const anchorParam = Array.from(
-      new Set([...(anchorIds || []), ...anchorFromOutfit])
-    );
-    const excludeParam = Array.from(
-      new Set([...(excludeIds || []), current.id])
-    );
-
-    const params = {
-      formality,
-      outfit_date: outfitDate,
-    };
-
+    const params = { formality, outfit_date: outfitDate };
     if (anchorParam.length) params.anchor_ids = anchorParam.join(",");
     if (excludeParam.length) params.exclude_ids = excludeParam.join(",");
 
     setSwappingPart(part);
     setErr("");
-
     try {
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
       const preliked = new Set(
-        (data.outfits || [])
-          .filter(e => e.already_liked)
-          .map(e => e.color_fingerprint)
-          .filter(Boolean)
+        (data.outfits || []).filter(e => e.already_liked).map(e => e.color_fingerprint).filter(Boolean)
       );
       const predisliked = new Set(
-        (data.outfits || [])
-          .filter(e => e.already_disliked)
-          .map(e => e.color_fingerprint)
-          .filter(Boolean)
+        (data.outfits || []).filter(e => e.already_disliked).map(e => e.color_fingerprint).filter(Boolean)
       );
       setLikedCombos(preliked);
       setDislikedCombos(predisliked);
       setOutfitIndex(0);
     } catch (e) {
       console.error("swap failed", e);
-      const detail = e?.response?.data?.detail;
-      setErr(detail || "Could not swap this item. Please try again.");
+      setErr(e?.response?.data?.detail || "Could not swap this item. Please try again.");
     } finally {
       setSwappingPart(null);
     }
   }
-
 
   async function handleGenerateSubmit(e) {
     e.preventDefault();
@@ -211,35 +159,20 @@ export default function GenerateOutfit() {
       setErr("Please select date");
       return;
     }
-
-
     setLoading(true);
     setErr("");
     setShowModal(false);
-
     try {
       const params = { formality, outfit_date: outfitDate };
-
-      if (anchorIds.length) {
-        params.anchor_ids = anchorIds.join(",");
-      }
-      if (excludeIds.length) {
-        params.exclude_ids = excludeIds.join(",");
-      }
-
+      if (anchorIds.length) params.anchor_ids = anchorIds.join(",");
+      if (excludeIds.length) params.exclude_ids = excludeIds.join(",");
       const data = await suggestOutfit(userId, params);
       setSuggestion(data);
       const preliked = new Set(
-        (data.outfits || [])
-          .filter(e => e.already_liked)
-          .map(e => e.color_fingerprint)
-          .filter(Boolean)
+        (data.outfits || []).filter(e => e.already_liked).map(e => e.color_fingerprint).filter(Boolean)
       );
       const predisliked = new Set(
-        (data.outfits || [])
-          .filter(e => e.already_disliked)
-          .map(e => e.color_fingerprint)
-          .filter(Boolean)
+        (data.outfits || []).filter(e => e.already_disliked).map(e => e.color_fingerprint).filter(Boolean)
       );
       setLikedCombos(preliked);
       setDislikedCombos(predisliked);
@@ -258,27 +191,12 @@ export default function GenerateOutfit() {
       <h1 className="text-2xl font-semibold">Outfit Generator</h1>
       <p className="text-text-muted mt-1">AI-powered weather-based outfit suggestions</p>
 
-      {/* User Selection */}
-      <div className="mt-6 card p-6">
-        <label className="text-sm text-text-muted">Select User</label>
-        <select
-          className="mt-2 w-full bg-panel border border-border rounded-xl p-3 text-lg"
-          value={userId ?? ""}
-          onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)}
-        >
-          {!users.length && <option value="">No users</option>}
-          {users.map(u => (
-            <option key={u.id} value={u.id}>{u.name} • {u.city}</option>
-          ))}
-        </select>
-      </div>
-
       {/* Generate Button */}
       <div className="mt-6 flex justify-center">
         <button
           className="rounded-3xl px-12 py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold text-lg shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           onClick={openGenerateModal}
-          disabled={!userId || loading}
+          disabled={loading}
         >
           {loading ? "Generating..." : "✨ Generate Outfit"}
         </button>
@@ -305,7 +223,7 @@ export default function GenerateOutfit() {
                   Try uploading a few more pieces first.
                 </div>
               )}
-              {/* Date Selection */}
+
               <div>
                 <label className="block text-sm font-medium mb-2">📅 When are you going?</label>
                 <input
@@ -317,7 +235,6 @@ export default function GenerateOutfit() {
                 />
               </div>
 
-              {/* Formality Selection */}
               <div>
                 <label className="block text-sm font-medium mb-2">👔 What's the occasion?</label>
                 <div className="grid grid-cols-1 gap-2">
@@ -337,7 +254,6 @@ export default function GenerateOutfit() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -359,14 +275,13 @@ export default function GenerateOutfit() {
                 >
                   Generate
                 </button>
-
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* include / exclude items for this suggestion */}
+      {/* include / exclude items */}
       {userId && items.length > 0 && (
         <div className="mt-6 card p-4">
           <div className="flex items-center justify-between mb-3">
@@ -379,10 +294,7 @@ export default function GenerateOutfit() {
             <button
               type="button"
               className="text-xs text-text-muted underline"
-              onClick={() => {
-                setAnchorIds([]);
-                setExcludeIds([]);
-              }}
+              onClick={() => { setAnchorIds([]); setExcludeIds([]); }}
             >
               clear
             </button>
@@ -392,7 +304,6 @@ export default function GenerateOutfit() {
             {items.map((item) => {
               const isAnchor = anchorIds.includes(item.id);
               const isExcluded = excludeIds.includes(item.id);
-
               return (
                 <div
                   key={item.id}
@@ -408,12 +319,9 @@ export default function GenerateOutfit() {
                       {item.category || item.outfit_part || "item"}
                     </div>
                     {item.outfit_part && (
-                      <span className="text-[10px] text-text-muted">
-                        {item.outfit_part}
-                      </span>
+                      <span className="text-[10px] text-text-muted">{item.outfit_part}</span>
                     )}
                   </div>
-
                   {item.image_url && (
                     <img
                       className="mt-1 w-full h-20 object-cover rounded-xl"
@@ -422,24 +330,20 @@ export default function GenerateOutfit() {
                       loading="lazy"
                     />
                   )}
-
                   <div className="mt-1 text-[11px] text-text-muted">
                     {(item.primary_color || "unknown")} · {(item.formality || "n/a")} · {(item.season || "n/a")}
                   </div>
-
                   <div className="mt-2 flex gap-1">
                     <button
                       type="button"
-                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isAnchor ? "bg-green-400/80 text-black border-transparent" : "border-border"
-                        }`}
+                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isAnchor ? "bg-green-400/80 text-black border-transparent" : "border-border"}`}
                       onClick={() => toggleAnchor(item.id)}
                     >
                       include
                     </button>
                     <button
                       type="button"
-                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isExcluded ? "bg-red-400/80 text-black border-transparent" : "border-border"
-                        }`}
+                      className={`flex-1 rounded-xl px-2 py-1 text-[11px] border ${isExcluded ? "bg-red-400/80 text-black border-transparent" : "border-border"}`}
                       onClick={() => toggleExclude(item.id)}
                     >
                       exclude
@@ -460,13 +364,11 @@ export default function GenerateOutfit() {
               Upload at least one top and one bottom so we can start building outfits around your clothes.
             </p>
           </div>
-          <a href="/upload" className="btn btn-accent text-xs">
-            Upload items
-          </a>
+          <a href="/upload" className="btn btn-accent text-xs">Upload items</a>
         </div>
       )}
 
-      {/* Disliked combos management panel */}
+      {/* Disliked combos panel */}
       {userId && savedDislikes.length > 0 && (
         <div className="mt-6 card p-4">
           <div className="flex items-center justify-between mb-3">
@@ -485,7 +387,6 @@ export default function GenerateOutfit() {
                 <button
                   type="button"
                   className="text-orange-400 hover:text-white transition text-base leading-none"
-                  title="Remove — allow this combo again"
                   onClick={async () => {
                     try {
                       await undislikeCombo(userId, d.color_fingerprint);
@@ -518,7 +419,7 @@ export default function GenerateOutfit() {
         </div>
       )}
 
-      {/* Beautiful Outfit Display */}
+      {/* Outfit Display */}
       {suggestion && (() => {
         const totalOutfits = suggestion.outfits?.length || 0;
         const currentEntry = suggestion.outfits?.[outfitIndex];
@@ -560,7 +461,6 @@ export default function GenerateOutfit() {
               }
               const result = await dislikeCombo(userId, fingerprint);
               setDislikedCombos(prev => new Set([...prev, fingerprint]));
-              // add to panel if not already there (result.id may not be present; refetch if needed)
               setSavedDislikes(prev =>
                 prev.some(x => x.color_fingerprint === fingerprint)
                   ? prev
@@ -571,195 +471,158 @@ export default function GenerateOutfit() {
         }
 
         return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-gradient-to-br from-panel to-background border border-border rounded-3xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <div className="flex items-center justify-center gap-3 mb-1">
-                <span className="text-2xl">{rankEmoji}</span>
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Outfit {outfitIndex + 1} of {totalOutfits}
-                </h2>
-              </div>
-              {score != null && (
-                <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30">
-                  <span className="text-sm text-text-muted">ML Score</span>
-                  <span className="text-lg font-bold text-purple-400">{score}/10</span>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+            <div className="bg-gradient-to-br from-panel to-background border border-border rounded-3xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="text-center mb-8">
+                <div className="flex items-center justify-center gap-3 mb-1">
+                  <span className="text-2xl">{rankEmoji}</span>
+                  <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    Outfit {outfitIndex + 1} of {totalOutfits}
+                  </h2>
                 </div>
-              )}
-
-              {/* Like / Dislike buttons */}
-              {fingerprint && (
-                <div className="mt-3 flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleToggleLike}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
-                    style={isLiked
-                      ? { borderColor: "#ec4899", background: "rgba(236,72,153,0.12)", color: "#ec4899" }
-                      : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
-                    }
-                    title={isLiked ? "Un-like — allow this combo again" : "Like — save this combo (won't repeat)"}
-                  >
-                    {isLiked ? "❤️ Liked" : "🤍 Like"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleDislike}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
-                    style={isDisliked
-                      ? { borderColor: "#f97316", background: "rgba(249,115,22,0.12)", color: "#f97316" }
-                      : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
-                    }
-                    title={isDisliked ? "Un-dislike — allow this combo again" : "Dislike — never suggest this combo again"}
-                  >
-                    {isDisliked ? "👎 Disliked" : "👎 Dislike"}
-                  </button>
-                </div>
-              )}
-              {/* Weather summary */}
-              {suggestion.weather && (
-                <div className="mt-3 text-sm text-text-muted flex flex-col items-center gap-1">
-                  <div>
-                    <span className="font-medium">
-                      {suggestion.weather.city || "Your city"}
-                    </span>{" "}
-                    · {suggestion.weather.temperature}°C
-                    {" "}
-                    <span className="text-xs text-text-muted">
-                      ({suggestion.weather.temp_min}–{suggestion.weather.temp_max}°C)
-                    </span>
+                {score != null && (
+                  <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30">
+                    <span className="text-sm text-text-muted">ML Score</span>
+                    <span className="text-lg font-bold text-purple-400">{score}/10</span>
                   </div>
-                  <div className="text-xs uppercase tracking-wide">
-                    season bucket:{" "}
-                    <span className="font-semibold">
-                      {suggestion.weather.season}
-                    </span>
+                )}
+                {fingerprint && (
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleLike}
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
+                      style={isLiked
+                        ? { borderColor: "#ec4899", background: "rgba(236,72,153,0.12)", color: "#ec4899" }
+                        : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
+                      }
+                    >
+                      {isLiked ? "❤️ Liked" : "🤍 Like"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleToggleDislike}
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border transition-all text-sm font-medium"
+                      style={isDisliked
+                        ? { borderColor: "#f97316", background: "rgba(249,115,22,0.12)", color: "#f97316" }
+                        : { borderColor: "var(--color-border)", color: "var(--color-text-muted)" }
+                      }
+                    >
+                      {isDisliked ? "👎 Disliked" : "👎 Dislike"}
+                    </button>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Outfit Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-              {["outer", "top", "bottom", "shoes"].map((part) => {
-                const it = outfit[part];
-
-                // Skip outer if it's empty
-                if (part === "outer" && !it) return null;
-
-                return (
-                  <div
-                    key={part}
-                    className="relative group"
-                    style={{ animation: `bounceIn 0.6s ease-out ${part === "outer" ? "0s" : part === "top" ? "0.1s" : part === "bottom" ? "0.2s" : "0.3s"}` }}
-                  >
-                    <div className="card p-4 hover:shadow-xl transition-shadow">
-                      <div className="text-sm font-medium text-text-muted mb-3 capitalize flex items-center gap-2">
-                        {part === "top" && "👕"}
-                        {part === "bottom" && "👖"}
-                        {part === "outer" && "🧥"}
-                        {part === "shoes" && "👟"}
-                        {part}
-                      </div>
-
-                      {it ? (
-                        <>
-                          {it.image_url ? (
-                            <div className="relative">
-                              <img
-                                className="w-full h-48 object-cover rounded-2xl shadow-md"
-                                src={imageSrc(it)}
-                                alt={it.category || it.outfit_part || part}
-                                loading="lazy"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                          ) : (
-                            <div className="w-full h-48 rounded-2xl bg-panel border-2 border-dashed border-border grid place-items-center">
-                              <span className="text-text-muted text-sm">No image</span>
-                            </div>
-                          )}
-                          <div className="mt-3">
-                            <div className="font-semibold text-base capitalize">
-                              {it.category || it.outfit_part || "item"}
-                            </div>
-                            <div className="text-xs text-text-muted mt-1 space-y-0.5">
-                              <div>🎨 {it.primary_color || "unknown"}</div>
-                              {it.formality && it.formality !== "any" && (
-                                <div>👔 {it.formality}</div>
-                              )}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleSwap(part)}
-                            className="mt-3 inline-flex items-center justify-center rounded-full border border-accent/70 px-3 py-1 text-[11px] uppercase tracking-wide text-accent hover:bg-accent/10 transition"
-                            disabled={swappingPart === part}
-                          >
-                            {swappingPart === part ? "Swapping..." : "Swap this piece"}
-                          </button>
-                        </>
-                      ) : (
-                        <div className="w-full h-48 rounded-2xl bg-panel/50 border-2 border-dashed border-border/50 grid place-items-center opacity-40">
-                          <span className="text-text-muted text-sm">—</span>
-                        </div>
-                      )}
+                )}
+                {suggestion.weather && (
+                  <div className="mt-3 text-sm text-text-muted flex flex-col items-center gap-1">
+                    <div>
+                      <span className="font-medium">{suggestion.weather.city || "Your city"}</span>
+                      {" · "}{suggestion.weather.temperature}°C
+                      {" "}
+                      <span className="text-xs text-text-muted">
+                        ({suggestion.weather.temp_min}–{suggestion.weather.temp_max}°C)
+                      </span>
+                    </div>
+                    <div className="text-xs uppercase tracking-wide">
+                      season bucket: <span className="font-semibold">{suggestion.weather.season}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Dot indicators */}
-            {totalOutfits > 1 && (
-              <div className="flex justify-center gap-2 mb-6">
-                {suggestion.outfits.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setOutfitIndex(idx)}
-                    className={`w-3 h-3 rounded-full transition-all ${
-                      idx === outfitIndex
-                        ? "bg-purple-500 scale-125"
-                        : "bg-border hover:bg-purple-400/50"
-                    }`}
-                  />
-                ))}
+                )}
               </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-4 justify-center flex-wrap">
-              <button
-                className="px-8 py-3 rounded-2xl border border-border hover:bg-panel transition"
-                onClick={() => { setSuggestion(null); setOutfitIndex(0); }}
-              >
-                Close
-              </button>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+                {["outer", "top", "bottom", "shoes"].map((part) => {
+                  const it = outfit[part];
+                  if (part === "outer" && !it) return null;
+                  return (
+                    <div key={part} className="relative group" style={{ animation: `bounceIn 0.6s ease-out ${part === "outer" ? "0s" : part === "top" ? "0.1s" : part === "bottom" ? "0.2s" : "0.3s"}` }}>
+                      <div className="card p-4 hover:shadow-xl transition-shadow">
+                        <div className="text-sm font-medium text-text-muted mb-3 capitalize flex items-center gap-2">
+                          {part === "top" && "👕"}
+                          {part === "bottom" && "👖"}
+                          {part === "outer" && "🧥"}
+                          {part === "shoes" && "👟"}
+                          {part}
+                        </div>
+                        {it ? (
+                          <>
+                            {it.image_url ? (
+                              <div className="relative">
+                                <img
+                                  className="w-full h-48 object-cover rounded-2xl shadow-md"
+                                  src={imageSrc(it)}
+                                  alt={it.category || it.outfit_part || part}
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            ) : (
+                              <div className="w-full h-48 rounded-2xl bg-panel border-2 border-dashed border-border grid place-items-center">
+                                <span className="text-text-muted text-sm">No image</span>
+                              </div>
+                            )}
+                            <div className="mt-3">
+                              <div className="font-semibold text-base capitalize">{it.category || it.outfit_part || "item"}</div>
+                              <div className="text-xs text-text-muted mt-1 space-y-0.5">
+                                <div>🎨 {it.primary_color || "unknown"}</div>
+                                {it.formality && it.formality !== "any" && (<div>👔 {it.formality}</div>)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSwap(part)}
+                              className="mt-3 inline-flex items-center justify-center rounded-full border border-accent/70 px-3 py-1 text-[11px] uppercase tracking-wide text-accent hover:bg-accent/10 transition"
+                              disabled={swappingPart === part}
+                            >
+                              {swappingPart === part ? "Swapping..." : "Swap this piece"}
+                            </button>
+                          </>
+                        ) : (
+                          <div className="w-full h-48 rounded-2xl bg-panel/50 border-2 border-dashed border-border/50 grid place-items-center opacity-40">
+                            <span className="text-text-muted text-sm">—</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-              {totalOutfits > 1 && outfitIndex < totalOutfits - 1 && (
-                <button
-                  className="px-8 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold transition"
-                  onClick={() => setOutfitIndex((i) => i + 1)}
-                >
-                  Next Outfit →
-                </button>
+              {totalOutfits > 1 && (
+                <div className="flex justify-center gap-2 mb-6">
+                  {suggestion.outfits.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setOutfitIndex(idx)}
+                      className={`w-3 h-3 rounded-full transition-all ${idx === outfitIndex ? "bg-purple-500 scale-125" : "bg-border hover:bg-purple-400/50"}`}
+                    />
+                  ))}
+                </div>
               )}
 
-              <button
-                className="px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
-                onClick={() => {
-                  setSuggestion(null);
-                  setOutfitIndex(0);
-                  openGenerateModal();
-                }}
-              >
-                Generate New
-              </button>
+              <div className="flex gap-4 justify-center flex-wrap">
+                <button
+                  className="px-8 py-3 rounded-2xl border border-border hover:bg-panel transition"
+                  onClick={() => { setSuggestion(null); setOutfitIndex(0); }}
+                >
+                  Close
+                </button>
+                {totalOutfits > 1 && outfitIndex < totalOutfits - 1 && (
+                  <button
+                    className="px-8 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold transition"
+                    onClick={() => setOutfitIndex((i) => i + 1)}
+                  >
+                    Next Outfit →
+                  </button>
+                )}
+                <button
+                  className="px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition"
+                  onClick={() => { setSuggestion(null); setOutfitIndex(0); openGenerateModal(); }}
+                >
+                  Generate New
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         );
       })()}
     </div>

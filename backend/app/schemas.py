@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
 class UserRead(BaseModel):
     id: int
     name: str
+    email: Optional[str] = None
     city: str
     style_preferences: Optional[str] = None
     created_at: datetime
@@ -29,6 +30,24 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     city: Optional[str] = None
     style_preferences: Optional[str] = None
+
+
+# ---------- Auth ----------
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    city: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    token: str
+    user: UserRead
 
 
 # ---------- Items ----------

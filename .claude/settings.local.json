@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/supre/Desktop/closet-pilot/frontend/src -type f \\\\\\(-name *.jsx -o -name *.tsx -o -name *.js \\\\\\) ! -path */node_modules/*)"
+    ]
+  }
+}

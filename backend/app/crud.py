@@ -31,6 +31,30 @@ def list_users(session: Session) -> Iterable[User]:
     return session.exec(select(User).order_by(User.id)).all()
 
 
+def get_user_by_email(session: Session, email: str) -> Optional[User]:
+    return session.exec(select(User).where(User.email == email)).first()
+
+
+def create_user_auth(
+    session: Session,
+    email: str,
+    hashed_password: str,
+    city: str,
+) -> User:
+    """Create a user account via signup (email + password)."""
+    name = email.split("@")[0]
+    user = User(
+        email=email,
+        hashed_password=hashed_password,
+        name=name,
+        city=city,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
 def get_user(session: Session, user_id: int) -> Optional[User]:
     return session.get(User, user_id)
 

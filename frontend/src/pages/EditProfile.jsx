@@ -15,7 +15,7 @@ export default function EditProfile() {
     const existing = getUser();
     if (!existing) {
       // no profile yet -> go through the normal flow
-      navigate("/create-user", { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
     setName(existing.name || "");
@@ -28,7 +28,7 @@ export default function EditProfile() {
 
     const existing = getUser();
     if (!existing) {
-      navigate("/create-user", { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
 

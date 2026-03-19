@@ -9,6 +9,8 @@ from .enums import Season, OutfitPart, Formality
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
+    email: Optional[str] = Field(default=None)
+    hashed_password: Optional[str] = Field(default=None)
     city: str
     style_preferences: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
