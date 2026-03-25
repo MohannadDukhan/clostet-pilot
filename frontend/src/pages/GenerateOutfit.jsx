@@ -135,16 +135,20 @@ export default function GenerateOutfit() {
     setErr("");
     try {
       const data = await suggestOutfit(userId, params);
-      setSuggestion(data);
-      const preliked = new Set(
-        (data.outfits || []).filter(e => e.already_liked).map(e => e.color_fingerprint).filter(Boolean)
-      );
-      const predisliked = new Set(
-        (data.outfits || []).filter(e => e.already_disliked).map(e => e.color_fingerprint).filter(Boolean)
-      );
-      setLikedCombos(preliked);
-      setDislikedCombos(predisliked);
-      setOutfitIndex(0);
+      const newEntry = data.outfits?.[0];
+      if (newEntry) {
+        setSuggestion(prev => {
+          const newOutfits = [...(prev.outfits || [])];
+          newOutfits[outfitIndex] = newEntry;
+          return { ...prev, outfits: newOutfits };
+        });
+        if (newEntry.already_liked && newEntry.color_fingerprint) {
+          setLikedCombos(prev => new Set([...prev, newEntry.color_fingerprint]));
+        }
+        if (newEntry.already_disliked && newEntry.color_fingerprint) {
+          setDislikedCombos(prev => new Set([...prev, newEntry.color_fingerprint]));
+        }
+      }
     } catch (e) {
       console.error("swap failed", e);
       setErr(e?.response?.data?.detail || "Could not swap this item. Please try again.");

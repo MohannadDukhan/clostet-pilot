@@ -805,15 +805,32 @@ def _pick_outfit_legacy(
     if not scored:
         return []
 
+    def _diff_count(outfit_a, outfit_b):
+        """Count how many pieces differ between two outfits by item id."""
+        count = 0
+        for key in ("top", "bottom", "outer", "shoes"):
+            a = outfit_a.get(key)
+            b = outfit_b.get(key)
+            a_id = getattr(a, "id", None) if a else None
+            b_id = getattr(b, "id", None) if b else None
+            if a_id != b_id:
+                count += 1
+        return count
+
+    MIN_PIECE_DIFF = 2
     DIVERSITY_THRESHOLDS = (1.5, 2.0)
     picked = [scored[0]]
     picked_ids = {id(scored[0])}
 
     for threshold in DIVERSITY_THRESHOLDS:
-        fps_seen = {e["color_fingerprint"] for e in picked}
-        natural  = next((e for e in scored if id(e) not in picked_ids), None)
-        diverse  = next((e for e in scored if id(e) not in picked_ids
-                         and e["color_fingerprint"] not in fps_seen), None)
+        natural = next((e for e in scored if id(e) not in picked_ids), None)
+        # require at least MIN_PIECE_DIFF different pieces vs every already-picked outfit
+        diverse = next(
+            (e for e in scored
+             if id(e) not in picked_ids
+             and all(_diff_count(e["outfit"], p["outfit"]) >= MIN_PIECE_DIFF for p in picked)),
+            None,
+        )
         if natural is None:
             break
         if diverse is None or diverse["score"] < natural["score"] - threshold:
