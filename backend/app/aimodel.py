@@ -64,20 +64,21 @@ def extract_features(hsvs: list[str]) -> list[float]:
     NEUTRAL = (0.0, 0.0, 0.0)
     top_safe    = top_hsv    or NEUTRAL
     bottom_safe = bottom_hsv or NEUTRAL
+    outer_safe  = outer_hsv  or NEUTRAL
     shoes_safe  = shoes_hsv  or NEUTRAL
 
     # ── Hue distances across every garment pair ────────────────────────────
+    # Always compute all 6 pairs using neutral fallback for missing outerwear,
+    # so avg/max hue distance features are always on the same scale the model
+    # was trained on regardless of whether an outer piece is present.
     all_distances = [
         hue_distance(top_safe[0], bottom_safe[0]),
         hue_distance(top_safe[0], shoes_safe[0]),
         hue_distance(bottom_safe[0], shoes_safe[0]),
+        hue_distance(top_safe[0],    outer_safe[0]),
+        hue_distance(bottom_safe[0], outer_safe[0]),
+        hue_distance(shoes_safe[0],  outer_safe[0]),
     ]
-    if outer_hsv:
-        all_distances += [
-            hue_distance(top_safe[0],    outer_hsv[0]),
-            hue_distance(bottom_safe[0], outer_hsv[0]),
-            hue_distance(shoes_safe[0],  outer_hsv[0]),
-        ]
 
     avg_hue_distance = sum(all_distances) / len(all_distances)
     max_hue_distance = max(all_distances)
